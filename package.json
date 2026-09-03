@@ -1,0 +1,41 @@
+{
+  "name": "kona",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "test:logic": "tsx scripts/test-logic.ts",
+    "prebuild": "expo prebuild --platform android",
+    "eas:ios": "npx.cmd eas-cli@latest build --platform ios --profile production",
+    "eas:preview": "npx.cmd eas-cli@latest build --platform ios --profile preview",
+    "eas:submit": "npx.cmd eas-cli@latest submit --platform ios --latest",
+    "emulator:env": "powershell -NoProfile -File scripts/emulator-qc.ps1 env",
+    "emulator:ready": "powershell -NoProfile -File scripts/emulator-qc.ps1 ready",
+    "emulator:dump-ui": "powershell -NoProfile -File scripts/emulator-qc.ps1 dump-ui",
+    "emulator:screenshot": "powershell -NoProfile -File scripts/emulator-qc.ps1 screenshot",
+    "emulator:launch": "powershell -NoProfile -File scripts/emulator-qc.ps1 launch"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/native": "^7.3.18",
+    "@react-navigation/native-stack": "^7.18.10",
+    "expo": "~57.0.19",
+    "expo-status-bar": "~57.0.1",
+    "lucide-react-native": "^1.39.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "tsx": "^4.23.13",
+    "typescript": "~6.0.3"
+  },
+  "private": true
+}
