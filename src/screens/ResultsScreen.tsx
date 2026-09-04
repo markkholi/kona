@@ -2,13 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ArrowLeft,

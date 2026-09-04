@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Image,
   StyleSheet,
@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Bookmark, CheckCircle2, ChevronRight, BookOpen } from 'lucide-react-native';
 import { BookRecommendation } from '../types/book';
+import { getBookCoverSource } from '../constants/bookCovers';
 
 interface BookCardProps {
   book: BookRecommendation;
@@ -24,6 +25,10 @@ export const BookCard: React.FC<BookCardProps> = ({
   onPress,
   onToggleSave,
 }) => {
+  const [imageError, setImageError] = useState<boolean>(false);
+  const coverSource = getBookCoverSource(book);
+  const showCover = Boolean(coverSource) && !imageError;
+
   return (
     <TouchableOpacity
       activeOpacity={0.7}
@@ -33,18 +38,25 @@ export const BookCard: React.FC<BookCardProps> = ({
       <View style={styles.contentRow}>
         {/* Book Cover or Fallback */}
         <View style={styles.coverContainer}>
-          {book.coverUrl ? (
+          {showCover ? (
             <Image
-              source={{ uri: book.coverUrl }}
+              source={coverSource!}
               style={styles.coverImage}
               resizeMode="cover"
+              onError={() => setImageError(true)}
             />
           ) : (
             <View style={styles.coverPlaceholder}>
-              <BookOpen size={28} color="#94A3B8" />
-              <Text style={styles.placeholderText} numberOfLines={2}>
-                {book.title}
-              </Text>
+              <View style={styles.spineAccent} />
+              <View style={styles.placeholderInner}>
+                <BookOpen size={22} color="#4F46E5" />
+                <Text style={styles.placeholderTitle} numberOfLines={3}>
+                  {book.title}
+                </Text>
+                <Text style={styles.placeholderAuthor} numberOfLines={1}>
+                  {book.author}
+                </Text>
+              </View>
             </View>
           )}
         </View>
@@ -141,16 +153,33 @@ const styles = StyleSheet.create({
   },
   coverPlaceholder: {
     flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#EEF2FF',
+  },
+  spineAccent: {
+    width: 5,
+    height: '100%',
+    backgroundColor: '#4F46E5',
+  },
+  placeholderInner: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 4,
-    backgroundColor: '#F1F5F9',
+    padding: 6,
   },
-  placeholderText: {
+  placeholderTitle: {
     fontSize: 9,
-    color: '#64748B',
+    fontWeight: '700',
+    color: '#1E1B4B',
     textAlign: 'center',
     marginTop: 4,
+    lineHeight: 12,
+  },
+  placeholderAuthor: {
+    fontSize: 8,
+    color: '#6366F1',
+    textAlign: 'center',
+    marginTop: 2,
     fontWeight: '500',
   },
   infoCol: {

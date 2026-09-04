@@ -3,7 +3,6 @@ import {
   Alert,
   Image,
   Linking,
-  SafeAreaView,
   ScrollView,
   Share,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ArrowLeft,
@@ -27,12 +27,16 @@ import {
 import { AgeAuditCard } from '../components/AgeAuditCard';
 import { isBookSaved, removeSavedBook, saveBook } from '../services/storage';
 import { RootStackParamList } from '../types/navigation';
+import { getBookCoverSource } from '../constants/bookCovers';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BookDetail'>;
 
 export const BookDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { book, targetAge } = route.params;
   const [isSaved, setIsSaved] = useState<boolean>(false);
+  const [imageError, setImageError] = useState<boolean>(false);
+  const coverSource = getBookCoverSource(book);
+  const showCover = Boolean(coverSource) && !imageError;
 
   useEffect(() => {
     checkSaved();
@@ -121,16 +125,25 @@ export const BookDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         {/* Book Header / Cover Card */}
         <View style={styles.heroCard}>
           <View style={styles.coverWrapper}>
-            {book.coverUrl ? (
+            {showCover ? (
               <Image
-                source={{ uri: book.coverUrl }}
+                source={coverSource!}
                 style={styles.coverImage}
                 resizeMode="cover"
+                onError={() => setImageError(true)}
               />
             ) : (
               <View style={styles.coverPlaceholder}>
-                <BookOpen size={40} color="#94A3B8" />
-                <Text style={styles.coverPlaceholderText}>Kona Pick</Text>
+                <View style={styles.spineAccent} />
+                <View style={styles.placeholderInner}>
+                  <BookOpen size={32} color="#4F46E5" />
+                  <Text style={styles.coverPlaceholderTitle} numberOfLines={3}>
+                    {book.title}
+                  </Text>
+                  <Text style={styles.coverPlaceholderAuthor} numberOfLines={1}>
+                    {book.author}
+                  </Text>
+                </View>
               </View>
             )}
           </View>
@@ -284,15 +297,34 @@ const styles = StyleSheet.create({
   },
   coverPlaceholder: {
     flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#EEF2FF',
+  },
+  spineAccent: {
+    width: 6,
+    height: '100%',
+    backgroundColor: '#4F46E5',
+  },
+  placeholderInner: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    padding: 8,
   },
-  coverPlaceholderText: {
+  coverPlaceholderTitle: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: '#1E1B4B',
     marginTop: 6,
-    fontWeight: '600',
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  coverPlaceholderAuthor: {
+    fontSize: 9,
+    color: '#6366F1',
+    marginTop: 3,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   heroInfo: {
     flex: 1,

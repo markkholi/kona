@@ -226,17 +226,30 @@ async function enrichBooksWithGoogleMetadata(
   books: BookRecommendation[]
 ): Promise<BookRecommendation[]> {
   const enrichPromises = books.map(async (book) => {
-    // If cover already present, skip query
+    // If verified cover already present, skip query
     if (book.coverUrl && book.isbn) {
       return book;
     }
     const meta = await fetchGoogleBookMetadata(book.title, book.author);
-    if (!meta) return book;
+    if (!meta) {
+      if (book.isbn && !book.coverUrl) {
+        return {
+          ...book,
+          coverUrl: `https://covers.openlibrary.org/b/isbn/${book.isbn}-M.jpg`,
+        };
+      }
+      return book;
+    }
+
+    const resolvedIsbn = meta.isbn || book.isbn;
+    const resolvedCover =
+      meta.coverUrl ||
+      (resolvedIsbn ? `https://covers.openlibrary.org/b/isbn/${resolvedIsbn}-M.jpg` : book.coverUrl);
 
     return {
       ...book,
-      coverUrl: meta.coverUrl || book.coverUrl,
-      isbn: meta.isbn || book.isbn,
+      coverUrl: resolvedCover,
+      isbn: resolvedIsbn,
       pageCount: meta.pageCount || book.pageCount,
       previewLink: meta.previewLink || book.previewLink,
       description: book.description || meta.description,

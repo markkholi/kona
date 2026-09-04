@@ -54,6 +54,14 @@ export async function fetchGoogleBookMetadata(
 function parseVolumeInfo(info: any): GoogleBookMetadata | null {
   if (!info) return null;
 
+  // Look for ISBN_13 or ISBN_10
+  let isbn: string | undefined;
+  if (Array.isArray(info.industryIdentifiers)) {
+    const isbn13 = info.industryIdentifiers.find((id: any) => id.type === 'ISBN_13');
+    const isbn10 = info.industryIdentifiers.find((id: any) => id.type === 'ISBN_10');
+    isbn = isbn13?.identifier || isbn10?.identifier;
+  }
+
   let coverUrl =
     info.imageLinks?.extraLarge ||
     info.imageLinks?.large ||
@@ -66,12 +74,9 @@ function parseVolumeInfo(info: any): GoogleBookMetadata | null {
     coverUrl = coverUrl.replace('http://', 'https://');
   }
 
-  // Look for ISBN_13 or ISBN_10
-  let isbn: string | undefined;
-  if (Array.isArray(info.industryIdentifiers)) {
-    const isbn13 = info.industryIdentifiers.find((id: any) => id.type === 'ISBN_13');
-    const isbn10 = info.industryIdentifiers.find((id: any) => id.type === 'ISBN_10');
-    isbn = isbn13?.identifier || isbn10?.identifier;
+  // If Google Books has no cover, fallback to Open Library using ISBN
+  if (!coverUrl && isbn) {
+    coverUrl = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
   }
 
   let publishedYear: number | undefined;

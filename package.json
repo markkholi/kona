@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:logic": "tsx scripts/test-logic.ts",
     "prebuild": "expo prebuild --platform android",
+    "screenshots": "python scripts/generate_app_store_screenshots.py",
     "eas:ios": "npx.cmd eas-cli@latest build --platform ios --profile production",
     "eas:preview": "npx.cmd eas-cli@latest build --platform ios --profile preview",
     "eas:submit": "npx.cmd eas-cli@latest submit --platform ios --latest",

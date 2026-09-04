@@ -245,14 +245,14 @@ const styles = StyleSheet.create({
   },
   gaugePin: {
     position: 'absolute',
-    top: -6,
+    top: -5,
     marginLeft: -18,
     alignItems: 'center',
   },
   pinDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: '#4F46E5',
     borderWidth: 2,
     borderColor: '#FFFFFF',
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     color: '#4F46E5',
-    marginTop: 2,
+    marginTop: 4,
   },
   gaugeLabels: {
     flexDirection: 'row',
@@ -299,8 +299,9 @@ const styles = StyleSheet.create({
   },
   metricLimit: {
     fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 1,
+    color: '#475569',
+    marginTop: 2,
+    fontWeight: '500',
   },
   metricPill: {
     paddingHorizontal: 8,

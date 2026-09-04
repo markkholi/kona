@@ -103,20 +103,38 @@ Kona is a book recommendation app for readers aged 10-17. It does not require an
 
 ## 4. App Store Screenshots (Ready)
 
-App Store Connect requires **1284 x 2778 pixels (iPhone 6.7" / 6.5")** with **no alpha channel / transparency**.
+All required screenshots have been generated in `C:\Users\mkhol\Documents\Apps2\cursor\Kona\screenshots\`:
 
-The ready-to-upload screenshots have been generated in:
-`C:\Users\mkhol\Documents\Apps2\cursor\Kona\.qc\appstore_1284x2778\`
+### Directory Structure & Resolutions
+1. **iPhone 6.1" (`1170 x 2532` px, 24-bit RGB, No Alpha):**
+   `screenshots/iphone_6.1/`
+   - `01_home_screen.png` — Age 12 selector, middle school Lexile benchmark, interest chips
+   - `02_results_20_books.png` — 20 vetted recommendations with "Verified for Age" badges
+   - `03_book_audit_detail.png` — 4-factor maturity safety scorecard & educator rationale
+   - `04_saved_reading_list.png` — Saved books reading list
+   - `05_settings_rubrics.png` — Provider settings & developmental rubrics 10–17
 
-- `01_home_screen.png` (Home Screen with Age 12 selector and interest chips)
-- `02_results_20_books.png` (Results view with 20 books and "Verified for Age" badges)
-- `03_age_appropriateness_audit.png` (Detailed Age-Appropriateness Audit scorecard & matrix)
-- `04_saved_reading_list.png` (Saved reading list with bookmarked titles)
-- `05_age_rubrics_settings.png` (Settings view displaying developmental rubrics 10–17)
+2. **iPhone 6.5" / 6.7" (`1284 x 2778` px, 24-bit RGB, No Alpha):**
+   `screenshots/iphone_6.5/`
+   - `01_home_screen.png`
+   - `02_results_20_books.png`
+   - `03_book_audit_detail.png`
+   - `04_saved_reading_list.png`
+   - `05_settings_rubrics.png`
+   *(Also available as marketing showcase cards in `screenshots/iphone_6.5_showcase/`)*
 
-To regenerate or process new captures at any time:
+3. **iPad 13-inch (`2064 x 2752` px, 24-bit RGB, No Alpha):**
+   `screenshots/ipad_13/`
+   - `01_home_screen.png`
+   - `02_results_20_books.png`
+   - `03_book_audit_detail.png`
+   - `04_saved_reading_list.png`
+   - `05_settings_rubrics.png`
+   *(Also available for 12.9" at `2048 x 2732` px in `screenshots/ipad_12.9/`)*
+
+To re-generate all screenshots at any time:
 ```powershell
-python scripts/prepare-appstore-screenshots.py
+python scripts/generate_app_store_screenshots.py
 ```
 
 ---
