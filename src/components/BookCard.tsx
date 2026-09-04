@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { Bookmark, CheckCircle2, ChevronRight, BookOpen } from 'lucide-react-native';
 import { BookRecommendation } from '../types/book';
-import { getBookCoverSource } from '../constants/bookCovers';
+import { getBookCoverSource, getBookJacketTheme } from '../constants/bookCovers';
 
 interface BookCardProps {
   book: BookRecommendation;
@@ -28,6 +28,7 @@ export const BookCard: React.FC<BookCardProps> = ({
   const [imageError, setImageError] = useState<boolean>(false);
   const coverSource = getBookCoverSource(book);
   const showCover = Boolean(coverSource) && !imageError;
+  const jacketTheme = getBookJacketTheme(book.title);
 
   return (
     <TouchableOpacity
@@ -46,14 +47,20 @@ export const BookCard: React.FC<BookCardProps> = ({
               onError={() => setImageError(true)}
             />
           ) : (
-            <View style={styles.coverPlaceholder}>
-              <View style={styles.spineAccent} />
+            <View style={[styles.coverPlaceholder, { backgroundColor: jacketTheme.background }]}>
+              <View style={[styles.spineAccent, { backgroundColor: jacketTheme.spine }]} />
               <View style={styles.placeholderInner}>
-                <BookOpen size={22} color="#4F46E5" />
-                <Text style={styles.placeholderTitle} numberOfLines={3}>
+                <BookOpen size={20} color={jacketTheme.icon} />
+                <Text
+                  style={[styles.placeholderTitle, { color: jacketTheme.titleColor }]}
+                  numberOfLines={3}
+                >
                   {book.title}
                 </Text>
-                <Text style={styles.placeholderAuthor} numberOfLines={1}>
+                <Text
+                  style={[styles.placeholderAuthor, { color: jacketTheme.authorColor }]}
+                  numberOfLines={1}
+                >
                   {book.author}
                 </Text>
               </View>

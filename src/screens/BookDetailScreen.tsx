@@ -27,7 +27,7 @@ import {
 import { AgeAuditCard } from '../components/AgeAuditCard';
 import { isBookSaved, removeSavedBook, saveBook } from '../services/storage';
 import { RootStackParamList } from '../types/navigation';
-import { getBookCoverSource } from '../constants/bookCovers';
+import { getBookCoverSource, getBookJacketTheme } from '../constants/bookCovers';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BookDetail'>;
 
@@ -37,6 +37,7 @@ export const BookDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [imageError, setImageError] = useState<boolean>(false);
   const coverSource = getBookCoverSource(book);
   const showCover = Boolean(coverSource) && !imageError;
+  const jacketTheme = getBookJacketTheme(book.title);
 
   useEffect(() => {
     checkSaved();
@@ -133,14 +134,20 @@ export const BookDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 onError={() => setImageError(true)}
               />
             ) : (
-              <View style={styles.coverPlaceholder}>
-                <View style={styles.spineAccent} />
+              <View style={[styles.coverPlaceholder, { backgroundColor: jacketTheme.background }]}>
+                <View style={[styles.spineAccent, { backgroundColor: jacketTheme.spine }]} />
                 <View style={styles.placeholderInner}>
-                  <BookOpen size={32} color="#4F46E5" />
-                  <Text style={styles.coverPlaceholderTitle} numberOfLines={3}>
+                  <BookOpen size={30} color={jacketTheme.icon} />
+                  <Text
+                    style={[styles.coverPlaceholderTitle, { color: jacketTheme.titleColor }]}
+                    numberOfLines={3}
+                  >
                     {book.title}
                   </Text>
-                  <Text style={styles.coverPlaceholderAuthor} numberOfLines={1}>
+                  <Text
+                    style={[styles.coverPlaceholderAuthor, { color: jacketTheme.authorColor }]}
+                    numberOfLines={1}
+                  >
                     {book.author}
                   </Text>
                 </View>

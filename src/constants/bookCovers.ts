@@ -56,19 +56,63 @@ export const LOCAL_ISBN_COVERS: Record<string, ImageSourcePropType> = {
   '9780062278227': require('../../assets/covers/mock-25.jpg'),
 };
 
+export interface BookJacketTheme {
+  background: string;
+  spine: string;
+  icon: string;
+  titleColor: string;
+  authorColor: string;
+}
+
+export const JACKET_PALETTES: BookJacketTheme[] = [
+  { background: '#EEF2FF', spine: '#4F46E5', icon: '#4338CA', titleColor: '#1E1B4B', authorColor: '#4F46E5' }, // Indigo
+  { background: '#F0FDF4', spine: '#16A34A', icon: '#15803D', titleColor: '#14532D', authorColor: '#16A34A' }, // Emerald
+  { background: '#FFF1F2', spine: '#E11D48', icon: '#BE123C', titleColor: '#881337', authorColor: '#E11D48' }, // Rose
+  { background: '#F0FDFA', spine: '#0D9488', icon: '#0F766E', titleColor: '#134E4A', authorColor: '#0D9488' }, // Teal
+  { background: '#FAF5FF', spine: '#9333EA', icon: '#7E22CE', titleColor: '#581C87', authorColor: '#9333EA' }, // Purple
+  { background: '#FFFBEB', spine: '#D97706', icon: '#B45309', titleColor: '#78350F', authorColor: '#D97706' }, // Amber
+  { background: '#EFF6FF', spine: '#2563EB', icon: '#1D4ED8', titleColor: '#1E3A8A', authorColor: '#2563EB' }, // Blue
+  { background: '#FDF4FF', spine: '#C026D3', icon: '#A21CAF', titleColor: '#701A75', authorColor: '#C026D3' }, // Fuchsia
+];
+
+export function getBookJacketTheme(title: string = ''): BookJacketTheme {
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) {
+    hash = (hash << 5) - hash + title.charCodeAt(i);
+    hash |= 0;
+  }
+  const index = Math.abs(hash) % JACKET_PALETTES.length;
+  return JACKET_PALETTES[index];
+}
+
 export function getBookCoverSource(book: {
   id?: string;
   isbn?: string;
   coverUrl?: string;
 }): ImageSourcePropType | null {
-  if (book.id && LOCAL_BOOK_COVERS[book.id]) {
-    return LOCAL_BOOK_COVERS[book.id];
+  if (book.id) {
+    if (LOCAL_BOOK_COVERS[book.id]) {
+      return LOCAL_BOOK_COVERS[book.id];
+    }
+    const cleanId = book.id.replace(/^rec-\d+-/, '');
+    if (LOCAL_BOOK_COVERS[cleanId]) {
+      return LOCAL_BOOK_COVERS[cleanId];
+    }
   }
-  if (book.isbn && LOCAL_ISBN_COVERS[book.isbn]) {
-    return LOCAL_ISBN_COVERS[book.isbn];
+
+  if (book.isbn) {
+    const cleanIsbn = book.isbn.replace(/[-\s]/g, '');
+    if (LOCAL_ISBN_COVERS[book.isbn]) {
+      return LOCAL_ISBN_COVERS[book.isbn];
+    }
+    if (LOCAL_ISBN_COVERS[cleanIsbn]) {
+      return LOCAL_ISBN_COVERS[cleanIsbn];
+    }
   }
+
   if (book.coverUrl && book.coverUrl.trim().length > 0) {
     return { uri: book.coverUrl };
   }
+
   return null;
 }

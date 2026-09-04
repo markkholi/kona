@@ -12,3 +12,6 @@ web-build/
 .qc/
 .env
 .env.local
+__pycache__/
+*.pyc
+
