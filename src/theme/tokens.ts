@@ -61,6 +61,9 @@ export const elevation = {
   },
 } as const;
 
+export const HIT_TARGET = 44;
+export const MAX_FONT_SIZE_MULTIPLIER = 1.5;
+
 const BASE_FONT_SIZES = {
   hero: 28,
   title: 20,
@@ -70,15 +73,35 @@ const BASE_FONT_SIZES = {
   micro: 10,
 } as const;
 
-const MAX_SCALE = 1.5;
-
 export type FontToken = keyof typeof BASE_FONT_SIZES;
 
 /**
  * Returns a font size scaled by the device's accessibility font-scale setting,
- * clamped to MAX_SCALE to prevent extreme layout breakage.
+ * clamped to MAX_FONT_SIZE_MULTIPLIER to prevent extreme layout breakage.
  */
 export function scaledFontSize(token: FontToken): number {
-  const scale = Math.min(PixelRatio.getFontScale(), MAX_SCALE);
+  const scale = Math.min(PixelRatio.getFontScale(), MAX_FONT_SIZE_MULTIPLIER);
   return Math.round(BASE_FONT_SIZES[token] * scale);
 }
+
+export const lightTokens = {
+  colors,
+  spacing,
+  radii,
+  elevation,
+} as const;
+
+/** Placeholder structure for a future dark-mode pass (out of scope for AP1). */
+export const darkTokens = {
+  colors: {
+    ...colors,
+    cream: '#2A2420',
+    linen: '#3B322C',
+    espresso: '#F5EDE3',
+    parchment: '#3A332C',
+    dusty: '#C4B8AE',
+  },
+  spacing,
+  radii,
+  elevation,
+} as const;

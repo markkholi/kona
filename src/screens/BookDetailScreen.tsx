@@ -1,22 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
   Linking,
-  ScrollView,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import Animated, {
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import {
   ArrowLeft,
   Bookmark,
   BookOpen,
   Calendar,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   FileText,
   Hash,
@@ -26,34 +31,51 @@ import {
 } from 'lucide-react-native';
 import { AgeAuditCard } from '../components/AgeAuditCard';
 import { isBookSaved, removeSavedBook, saveBook } from '../services/storage';
-import { RootStackParamList } from '../types/navigation';
+import { shareSingleBook } from '../services/share';
+import { DiscoverStackParamList } from '../types/navigation';
 import { getBookCoverSource, getBookJacketTheme } from '../constants/bookCovers';
+import { useProfiles } from '../context/ProfileContext';
+import { colors, elevation, HIT_TARGET, radii, spacing } from '../theme/tokens';
+import { useReduceMotion, useScaledFont } from '../theme/useScaledFont';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'BookDetail'>;
+type Props = NativeStackScreenProps<DiscoverStackParamList, 'BookDetail'>;
+
+const HERO_HEIGHT = 320;
 
 export const BookDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { book, targetAge } = route.params;
-  const [isSaved, setIsSaved] = useState<boolean>(false);
-  const [imageError, setImageError] = useState<boolean>(false);
+  const { activeProfile } = useProfiles();
+  const font = useScaledFont();
+  const reduceMotion = useReduceMotion();
+  const insets = useSafeAreaInsets();
+
+  const [isSaved, setIsSaved] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [synopsisOpen, setSynopsisOpen] = useState(false);
+  const [interestOpen, setInterestOpen] = useState(false);
+
   const coverSource = getBookCoverSource(book);
   const showCover = Boolean(coverSource) && !imageError;
   const jacketTheme = getBookJacketTheme(book.title);
+  const scrollY = useSharedValue(0);
 
   useEffect(() => {
     checkSaved();
-  }, [book.title]);
+  }, [book.title, activeProfile?.id]);
 
   const checkSaved = async () => {
-    const saved = await isBookSaved(book.title);
+    if (!activeProfile) return;
+    const saved = await isBookSaved(book.title, activeProfile.id);
     setIsSaved(saved);
   };
 
   const handleToggleSave = async () => {
+    if (!activeProfile) return;
     if (isSaved) {
-      await removeSavedBook(book.id);
+      await removeSavedBook(book.id, activeProfile.id);
       setIsSaved(false);
     } else {
-      await saveBook(book);
+      await saveBook(book, activeProfile.id);
       setIsSaved(true);
     }
   };
@@ -85,367 +107,322 @@ export const BookDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleShare = async () => {
-    try {
-      await Share.share({
-        title: `${book.title} by ${book.author}`,
-        message: `Book Recommendation for Age ${targetAge}: "${book.title}" by ${book.author}.\n\nWhy it's age-appropriate: ${book.whyAppropriate}\n\nRecommended by Kona.`,
-      });
-    } catch (err) {
-      console.log('Share error:', err);
-    }
+    await shareSingleBook(book, targetAge, activeProfile?.name);
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      {/* Top Bar */}
-      <View style={styles.navBar}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ArrowLeft size={22} color="#0F172A" />
-        </TouchableOpacity>
-        <Text style={styles.navTitle} numberOfLines={1}>
-          Book Details & Audit
-        </Text>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={handleShare}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Share2 size={20} color="#334155" />
-        </TouchableOpacity>
-      </View>
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+  const heroStyle = useAnimatedStyle(() => {
+    if (reduceMotion) return {};
+    return {
+      transform: [{ translateY: scrollY.value * 0.35 }],
+    };
+  }, [reduceMotion]);
+
+  return (
+    <View style={styles.safeArea}>
+      <Animated.ScrollView
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
       >
-        {/* Book Header / Cover Card */}
-        <View style={styles.heroCard}>
-          <View style={styles.coverWrapper}>
+        <View style={styles.heroZone}>
+          <Animated.View style={[styles.heroImageWrap, heroStyle]}>
             {showCover ? (
               <Image
                 source={coverSource!}
-                style={styles.coverImage}
+                style={styles.heroImage}
                 resizeMode="cover"
                 onError={() => setImageError(true)}
               />
             ) : (
-              <View style={[styles.coverPlaceholder, { backgroundColor: jacketTheme.background }]}>
-                <View style={[styles.spineAccent, { backgroundColor: jacketTheme.spine }]} />
-                <View style={styles.placeholderInner}>
-                  <BookOpen size={30} color={jacketTheme.icon} />
-                  <Text
-                    style={[styles.coverPlaceholderTitle, { color: jacketTheme.titleColor }]}
-                    numberOfLines={3}
-                  >
-                    {book.title}
-                  </Text>
-                  <Text
-                    style={[styles.coverPlaceholderAuthor, { color: jacketTheme.authorColor }]}
-                    numberOfLines={1}
-                  >
-                    {book.author}
-                  </Text>
-                </View>
+              <View style={[styles.heroFallback, { backgroundColor: jacketTheme.background }]}>
+                <BookOpen size={40} color={jacketTheme.icon} />
+                <Text style={[styles.heroFallbackTitle, { color: jacketTheme.titleColor }]}>
+                  {book.title}
+                </Text>
               </View>
             )}
-          </View>
-
-          <View style={styles.heroInfo}>
-            <View style={styles.genreBadge}>
-              <Text style={styles.genreBadgeText}>{book.genre || 'Youth Fiction'}</Text>
-            </View>
-
-            <Text style={styles.title}>{book.title}</Text>
-            <Text style={styles.author}>by {book.author}</Text>
-
-            {/* Quick Metadata Chips */}
-            <View style={styles.metaRow}>
-              <View style={styles.metaChip}>
-                <Calendar size={12} color="#64748B" />
-                <Text style={styles.metaChipText}>{book.publishedYear}</Text>
-              </View>
-              {book.pageCount ? (
-                <View style={styles.metaChip}>
-                  <FileText size={12} color="#64748B" />
-                  <Text style={styles.metaChipText}>{book.pageCount} pages</Text>
-                </View>
-              ) : null}
-              {book.isbn ? (
-                <View style={styles.metaChip}>
-                  <Hash size={12} color="#64748B" />
-                  <Text style={styles.metaChipText}>ISBN {book.isbn}</Text>
-                </View>
-              ) : null}
-            </View>
+            <View style={styles.heroGradient} />
+          </Animated.View>
+          <View style={[styles.genreOverlay, { top: insets.top + 8 }]}>
+            <Text
+              style={[styles.genreOverlayText, { fontSize: font.micro }]}
+              maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+            >
+              {book.genre || 'Youth Fiction'}
+            </Text>
           </View>
         </View>
 
-        {/* Action Buttons Row */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.saveButton, isSaved && styles.saveButtonActive]}
-            onPress={handleToggleSave}
+        <View style={styles.body}>
+          <Text
+            style={[styles.title, { fontSize: font.title }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
           >
-            <Bookmark
-              size={18}
-              color={isSaved ? '#FFFFFF' : '#4F46E5'}
-              fill={isSaved ? '#FFFFFF' : 'transparent'}
-            />
-            <Text style={[styles.saveButtonText, isSaved && styles.saveButtonTextActive]}>
-              {isSaved ? 'Saved to Reading List' : 'Save Book'}
+            {book.title}
+          </Text>
+          <Text
+            style={[styles.author, { fontSize: font.body }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            by {book.author}
+          </Text>
+
+          <View style={styles.metaRow}>
+            <View style={styles.metaChip}>
+              <Calendar size={12} color={colors.dusty} />
+              <Text style={styles.metaChipText}>{book.publishedYear}</Text>
+            </View>
+            {book.pageCount ? (
+              <View style={styles.metaChip}>
+                <FileText size={12} color={colors.dusty} />
+                <Text style={styles.metaChipText}>{book.pageCount} pages</Text>
+              </View>
+            ) : null}
+            {book.isbn ? (
+              <View style={styles.metaChip}>
+                <Hash size={12} color={colors.dusty} />
+                <Text style={styles.metaChipText}>ISBN {book.isbn}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <AgeAuditCard book={book} targetAge={targetAge} collapsible />
+
+          {book.description ? (
+            <TouchableOpacity
+              style={styles.sectionCard}
+              onPress={() => setSynopsisOpen((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel="Synopsis"
+              accessibilityState={{ expanded: synopsisOpen }}
+            >
+              <View style={styles.sectionHeader}>
+                <BookOpen size={18} color={colors.cocoa} />
+                <Text
+                  style={[styles.sectionTitle, { fontSize: font.body }]}
+                  maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+                >
+                  Synopsis
+                </Text>
+                {synopsisOpen ? (
+                  <ChevronUp size={16} color={colors.dusty} />
+                ) : (
+                  <ChevronDown size={16} color={colors.dusty} />
+                )}
+              </View>
+              <Text
+                style={[styles.sectionBody, { fontSize: font.body }]}
+                numberOfLines={synopsisOpen ? undefined : 3}
+                maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+              >
+                {book.description}
+              </Text>
+              <Text style={styles.readMore}>{synopsisOpen ? 'Show less' : 'Read more'}</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity
+            style={styles.sectionCard}
+            onPress={() => setInterestOpen((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel="Why this matches the reader's interest"
+            accessibilityState={{ expanded: interestOpen }}
+          >
+            <View style={styles.sectionHeader}>
+              <Sparkles size={18} color={colors.honey} />
+              <Text
+                style={[styles.sectionTitle, { fontSize: font.body }]}
+                maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+              >
+                Interest Connection
+              </Text>
+              {interestOpen ? (
+                <ChevronUp size={16} color={colors.dusty} />
+              ) : (
+                <ChevronDown size={16} color={colors.dusty} />
+              )}
+            </View>
+            <Text
+              style={[styles.sectionBody, { fontSize: font.body }]}
+              numberOfLines={interestOpen ? undefined : 3}
+              maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+            >
+              {book.interestConnection}
             </Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.previewButton} onPress={handleOpenPreview}>
-            <ExternalLink size={18} color="#0F172A" />
-            <Text style={styles.previewButtonText}>Google Books</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.libraryButton} onPress={handleLibrarySearch}>
-            <Library size={18} color="#0F172A" />
-          </TouchableOpacity>
         </View>
+      </Animated.ScrollView>
 
-        {/* Dedicated Age Appropriateness Audit Component */}
-        <AgeAuditCard book={book} targetAge={targetAge} />
+      <TouchableOpacity
+        style={[styles.backFab, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <ArrowLeft size={20} color={colors.espresso} />
+      </TouchableOpacity>
 
-        {/* Interest Connection Section */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Sparkles size={18} color="#4F46E5" />
-            <Text style={styles.sectionTitle}>Why This Matches The Reader’s Interest</Text>
-          </View>
-          <Text style={styles.sectionBody}>{book.interestConnection}</Text>
-        </View>
-
-        {/* Book Synopsis / Description */}
-        {book.description ? (
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <BookOpen size={18} color="#0F172A" />
-              <Text style={styles.sectionTitle}>Synopsis</Text>
-            </View>
-            <Text style={styles.sectionBody}>{book.description}</Text>
-          </View>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
+      <View style={[styles.actionBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+        <TouchableOpacity
+          style={[styles.actionBtn, isSaved && styles.saveActive]}
+          onPress={handleToggleSave}
+          accessibilityRole="button"
+          accessibilityLabel={isSaved ? 'Remove from saved books' : 'Save book'}
+        >
+          <Bookmark
+            size={18}
+            color={isSaved ? colors.white : colors.cocoa}
+            fill={isSaved ? colors.white : 'transparent'}
+          />
+          <Text style={[styles.actionLabel, isSaved && styles.actionLabelOn]}>
+            {isSaved ? 'Saved' : 'Save'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={handleOpenPreview}
+          accessibilityRole="button"
+          accessibilityLabel="Open Google Books"
+        >
+          <ExternalLink size={18} color={colors.cocoa} />
+          <Text style={styles.actionLabel}>Google</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={handleLibrarySearch}
+          accessibilityRole="button"
+          accessibilityLabel="Search libraries on WorldCat"
+        >
+          <Library size={18} color={colors.cocoa} />
+          <Text style={styles.actionLabel}>Library</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={handleShare}
+          accessibilityRole="button"
+          accessibilityLabel="Share this book"
+        >
+          <Share2 size={18} color={colors.cocoa} />
+          <Text style={styles.actionLabel}>Share</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.cream,
   },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-  },
-  backButton: {
-    padding: 4,
-  },
-  navTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F172A',
-    flex: 1,
-    textAlign: 'center',
-    marginHorizontal: 10,
-  },
-  actionButton: {
-    padding: 4,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  heroCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 14,
-  },
-  coverWrapper: {
-    width: 100,
-    height: 150,
-    borderRadius: 10,
+  heroZone: {
+    height: HERO_HEIGHT,
     overflow: 'hidden',
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    marginRight: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: colors.parchment,
   },
-  coverImage: {
+  heroImageWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  heroImage: {
     width: '100%',
     height: '100%',
   },
-  coverPlaceholder: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#EEF2FF',
-  },
-  spineAccent: {
-    width: 6,
-    height: '100%',
-    backgroundColor: '#4F46E5',
-  },
-  placeholderInner: {
+  heroFallback: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 8,
+    padding: spacing.lg,
   },
-  coverPlaceholderTitle: {
-    fontSize: 11,
-    color: '#1E1B4B',
-    marginTop: 6,
+  heroFallbackTitle: {
+    marginTop: spacing.sm,
     fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 14,
   },
-  coverPlaceholderAuthor: {
-    fontSize: 9,
-    color: '#6366F1',
-    marginTop: 3,
-    fontWeight: '500',
-    textAlign: 'center',
+  heroGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 120,
+    backgroundColor: 'rgba(251,248,244,0.92)',
   },
-  heroInfo: {
-    flex: 1,
-    justifyContent: 'center',
+  genreOverlay: {
+    position: 'absolute',
+    right: spacing.md,
+    backgroundColor: colors.linen,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radii.xl,
+    ...elevation.low,
   },
-  genreBadge: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginBottom: 6,
-  },
-  genreBadgeText: {
-    fontSize: 10,
+  genreOverlayText: {
+    color: colors.cocoa,
     fontWeight: '700',
-    color: '#4F46E5',
     textTransform: 'uppercase',
   },
+  backFab: {
+    position: 'absolute',
+    left: spacing.md,
+    width: HIT_TARGET,
+    height: HIT_TARGET,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(255,253,251,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...elevation.low,
+  },
+  body: {
+    paddingHorizontal: spacing.md,
+    marginTop: -24,
+  },
   title: {
-    fontSize: 18,
     fontWeight: '800',
-    color: '#0F172A',
-    lineHeight: 22,
-    marginBottom: 4,
+    color: colors.espresso,
+    letterSpacing: -0.3,
   },
   author: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 10,
+    color: colors.dusty,
+    marginTop: 4,
+    marginBottom: spacing.sm,
   },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginBottom: spacing.sm,
   },
   metaChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.parchment,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     marginRight: 6,
     marginBottom: 6,
   },
   metaChipText: {
     fontSize: 11,
-    color: '#475569',
+    color: colors.dusty,
     marginLeft: 4,
     fontWeight: '500',
   },
-  actionRow: {
-    flexDirection: 'row',
-    marginBottom: 14,
-  },
-  saveButton: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EEF2FF',
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-    borderRadius: 12,
-    paddingVertical: 12,
-    marginRight: 8,
-  },
-  saveButtonActive: {
-    backgroundColor: '#4F46E5',
-    borderColor: '#4338CA',
-  },
-  saveButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#4F46E5',
-    marginLeft: 6,
-  },
-  saveButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  previewButton: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    paddingVertical: 12,
-    marginRight: 8,
-  },
-  previewButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginLeft: 6,
-  },
-  libraryButton: {
-    width: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-  },
   sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 12,
+    backgroundColor: colors.linen,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    ...elevation.low,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -453,14 +430,51 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.espresso,
     marginLeft: 8,
+    flex: 1,
   },
   sectionBody: {
+    color: colors.espresso,
+    lineHeight: 22,
+  },
+  readMore: {
+    marginTop: 6,
+    color: colors.honey,
+    fontWeight: '700',
     fontSize: 13,
-    color: '#334155',
-    lineHeight: 19,
+  },
+  actionBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    backgroundColor: colors.linen,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    ...elevation.medium,
+  },
+  actionBtn: {
+    flex: 1,
+    minHeight: HIT_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.md,
+    marginHorizontal: 2,
+    paddingVertical: 6,
+  },
+  saveActive: {
+    backgroundColor: colors.honey,
+  },
+  actionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.cocoa,
+    marginTop: 2,
+  },
+  actionLabelOn: {
+    color: colors.white,
   },
 });

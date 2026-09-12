@@ -14,6 +14,12 @@ function formatBook(book: BookRecommendation, index: number): string {
   if (book.pageCount) meta.push(`${book.pageCount} pages`);
   if (meta.length > 0) parts.push(`   ${meta.join(' · ')}`);
 
+  const why = book.interestConnection || book.whyAppropriate;
+  if (why) {
+    const clipped = why.length > 140 ? `${why.slice(0, 137)}...` : why;
+    parts.push(`   Why: ${clipped}`);
+  }
+
   return parts.join('\n');
 }
 
@@ -40,7 +46,7 @@ export function buildSharePayload(
 
   lines.push('');
   lines.push(`——`);
-  lines.push(`${books.length} books curated by Kona`);
+  lines.push(`${books.length} books curated by Kona · kona.app`);
 
   return lines.join('\n');
 }

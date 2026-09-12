@@ -1,38 +1,57 @@
+import 'react-native-gesture-handler';
 import React from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ProfileProvider, useProfiles } from './src/context/ProfileContext';
+import { BottomTabs } from './src/navigation/BottomTabs';
+import { colors } from './src/theme/tokens';
 
-import { HomeScreen } from './src/screens/HomeScreen';
-import { ResultsScreen } from './src/screens/ResultsScreen';
-import { BookDetailScreen } from './src/screens/BookDetailScreen';
-import { SavedBooksScreen } from './src/screens/SavedBooksScreen';
-import { SettingsScreen } from './src/screens/SettingsScreen';
-import { RootStackParamList } from './src/types/navigation';
+function AppShell() {
+  const { ready } = useProfiles();
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+  if (!ready) {
+    return (
+      <View style={styles.boot}>
+        <ActivityIndicator size="large" color={colors.honey} />
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer>
+      <StatusBar style="dark" />
+      <BottomTabs />
+    </NavigationContainer>
+  );
+}
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <NavigationContainer>
-        <StatusBar style="dark" />
-        <Stack.Navigator
-          initialRouteName="Home"
-          screenOptions={{
-            headerShown: false,
-            animation: 'slide_from_right',
-            contentStyle: { backgroundColor: '#F8FAFC' },
-          }}
-        >
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Results" component={ResultsScreen} />
-          <Stack.Screen name="BookDetail" component={BookDetailScreen} />
-          <Stack.Screen name="SavedBooks" component={SavedBooksScreen} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <BottomSheetModalProvider>
+          <ProfileProvider>
+            <AppShell />
+          </ProfileProvider>
+        </BottomSheetModalProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.cream,
+  },
+  boot: {
+    flex: 1,
+    backgroundColor: colors.cream,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

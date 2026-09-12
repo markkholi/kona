@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
+  Animated,
   FlatList,
   ScrollView,
   StyleSheet,
@@ -11,42 +11,56 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  ArrowLeft,
-  ArrowUpDown,
-  CheckCircle2,
-  Filter,
-  RefreshCw,
-  ShieldCheck,
-  Sparkles,
-  Bookmark,
-} from 'lucide-react-native';
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+} from '@gorhom/bottom-sheet';
+import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import { ArrowLeft, ArrowUpDown, RefreshCw, Share2 } from 'lucide-react-native';
 import { BookCard } from '../components/BookCard';
 import { fetchBookRecommendations } from '../services/aiRecommender';
 import {
   getApiSettings,
   getSavedBooks,
-  isBookSaved,
   removeSavedBook,
   saveBook,
 } from '../services/storage';
+import { shareBookList } from '../services/share';
 import { BookRecommendation } from '../types/book';
-import { RootStackParamList } from '../types/navigation';
+import { DiscoverStackParamList } from '../types/navigation';
+import { useProfiles } from '../context/ProfileContext';
+import { colors, HIT_TARGET, radii, spacing } from '../theme/tokens';
+import { useReduceMotion, useScaledFont } from '../theme/useScaledFont';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Results'>;
+type Props = NativeStackScreenProps<DiscoverStackParamList, 'Results'>;
 
 type SortOption = 'default' | 'year_desc' | 'year_asc' | 'title_asc';
 
+const SORT_LABELS: Record<SortOption, string> = {
+  default: 'Best Match',
+  year_desc: 'Newest',
+  year_asc: 'Oldest',
+  title_asc: 'Title A–Z',
+};
+
 export const ResultsScreen: React.FC<Props> = ({ route, navigation }) => {
   const { age, interest } = route.params;
+  const { activeProfile } = useProfiles();
+  const font = useScaledFont();
+  const reduceMotion = useReduceMotion();
 
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [books, setBooks] = useState<BookRecommendation[]>([]);
-  const [sourceInfo, setSourceInfo] = useState<string>('');
+  const [sourceInfo, setSourceInfo] = useState('');
   const [savedTitles, setSavedTitles] = useState<Set<string>>(new Set());
-  const [selectedGenre, setSelectedGenre] = useState<string>('All');
+  const [selectedGenre, setSelectedGenre] = useState('All');
   const [sortBy, setSortBy] = useState<SortOption>('default');
-  const [showSortMenu, setShowSortMenu] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const sortSheetRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['40%'], []);
+
+  const readerName = activeProfile?.name ?? 'Reader';
 
   useEffect(() => {
     loadRecommendations();
@@ -58,10 +72,11 @@ export const ResultsScreen: React.FC<Props> = ({ route, navigation }) => {
       refreshSavedStatus();
     });
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, activeProfile?.id]);
 
   const refreshSavedStatus = async () => {
-    const list = await getSavedBooks();
+    if (!activeProfile) return;
+    const list = await getSavedBooks(activeProfile.id);
     setSavedTitles(new Set(list.map((b) => b.title.toLowerCase())));
   };
 
@@ -91,18 +106,19 @@ export const ResultsScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleToggleSave = async (book: BookRecommendation) => {
+    if (!activeProfile) return;
     const titleLower = book.title.toLowerCase();
     const saved = savedTitles.has(titleLower);
 
     if (saved) {
-      await removeSavedBook(book.id);
+      await removeSavedBook(book.id, activeProfile.id);
       setSavedTitles((prev) => {
         const next = new Set(prev);
         next.delete(titleLower);
         return next;
       });
     } else {
-      await saveBook(book);
+      await saveBook(book, activeProfile.id);
       setSavedTitles((prev) => {
         const next = new Set(prev);
         next.add(titleLower);
@@ -111,7 +127,6 @@ export const ResultsScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  // Distinct genres for filtering
   const genres = useMemo(() => {
     const set = new Set<string>();
     books.forEach((b) => {
@@ -120,14 +135,11 @@ export const ResultsScreen: React.FC<Props> = ({ route, navigation }) => {
     return ['All', ...Array.from(set)];
   }, [books]);
 
-  // Filter and sort
   const displayedBooks = useMemo(() => {
     let result = [...books];
-
     if (selectedGenre !== 'All') {
       result = result.filter((b) => b.genre === selectedGenre);
     }
-
     if (sortBy === 'year_desc') {
       result.sort((a, b) => b.publishedYear - a.publishedYear);
     } else if (sortBy === 'year_asc') {
@@ -135,49 +147,51 @@ export const ResultsScreen: React.FC<Props> = ({ route, navigation }) => {
     } else if (sortBy === 'title_asc') {
       result.sort((a, b) => a.title.localeCompare(b.title));
     }
-
     return result;
   }, [books, selectedGenre, sortBy]);
 
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+    ),
+    []
+  );
+
+  const handleShare = () => {
+    shareBookList(displayedBooks, age, interest, readerName);
+  };
+
   const renderHeader = () => (
     <View style={styles.headerArea}>
-      {/* Search Query Context */}
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryTop}>
-          <View style={styles.ageBadge}>
-            <Text style={styles.ageBadgeText}>Age {age}</Text>
-          </View>
-          <Text style={styles.totalCountText}>20 Recommendations</Text>
-        </View>
-        <Text style={styles.interestQuote} numberOfLines={2}>
-          "{interest}"
+      <View style={styles.contextStrip}>
+        <Text
+          style={[styles.contextText, { fontSize: font.caption }]}
+          numberOfLines={2}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+        >
+          {readerName}, Age {age} · {interest} · {books.length} books
         </Text>
-        <View style={styles.sourceRow}>
-          <Sparkles size={13} color="#6366F1" />
-          <Text style={styles.sourceText}>Powered by: {sourceInfo}</Text>
-        </View>
-      </View>
-
-      {/* Verification Safety Banner */}
-      <View style={styles.safetyBanner}>
-        <ShieldCheck size={18} color="#059669" />
-        <View style={styles.safetyBannerTextCol}>
-          <Text style={styles.safetyBannerTitle}>
-            Age-Suitability Validated
-          </Text>
-          <Text style={styles.safetyBannerDesc}>
-            All 20 books below are verified against the developmental Lexile, language, and maturity benchmarks for age {age}.
-          </Text>
-        </View>
+        <TouchableOpacity
+          onPress={loadRecommendations}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh recommendations"
+          style={styles.iconHit}
+        >
+          <RefreshCw size={18} color={colors.cocoa} />
+        </TouchableOpacity>
       </View>
 
       {errorMessage && (
         <View style={styles.errorNotice}>
-          <Text style={styles.errorText}>{errorMessage}</Text>
+          <Text
+            style={[styles.errorText, { fontSize: font.caption }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            {errorMessage}
+          </Text>
         </View>
       )}
 
-      {/* Genre Filter Chips */}
       {genres.length > 2 && (
         <ScrollView
           horizontal
@@ -191,8 +205,18 @@ export const ResultsScreen: React.FC<Props> = ({ route, navigation }) => {
                 key={g}
                 style={[styles.filterChip, isSelected && styles.filterChipActive]}
                 onPress={() => setSelectedGenre(g)}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter ${g}`}
+                accessibilityState={{ selected: isSelected }}
               >
-                <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    { fontSize: font.caption },
+                    isSelected && styles.filterChipTextActive,
+                  ]}
+                  maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+                >
                   {g} {g === 'All' ? `(${books.length})` : ''}
                 </Text>
               </TouchableOpacity>
@@ -201,330 +225,326 @@ export const ResultsScreen: React.FC<Props> = ({ route, navigation }) => {
         </ScrollView>
       )}
 
-      {/* Sort Options Bar */}
       <View style={styles.sortBar}>
-        <Text style={styles.resultsCount}>
-          Showing {displayedBooks.length} of {books.length} titles
+        <Text
+          style={[styles.resultsCount, { fontSize: font.caption }]}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+        >
+          Showing {displayedBooks.length} of {books.length}
         </Text>
         <TouchableOpacity
           style={styles.sortTrigger}
-          onPress={() => setShowSortMenu(!showSortMenu)}
+          onPress={() => sortSheetRef.current?.present()}
+          accessibilityRole="button"
+          accessibilityLabel={`Sort: ${SORT_LABELS[sortBy]}`}
         >
-          <ArrowUpDown size={14} color="#4F46E5" />
-          <Text style={styles.sortTriggerText}>
-            Sort: {sortBy === 'default' ? 'Best Match' : sortBy === 'year_desc' ? 'Newest' : sortBy === 'year_asc' ? 'Oldest' : 'Title'}
+          <ArrowUpDown size={14} color={colors.cocoa} />
+          <Text
+            style={[styles.sortTriggerText, { fontSize: font.caption }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            Sort: {SORT_LABELS[sortBy]} ▼
           </Text>
         </TouchableOpacity>
       </View>
-
-      {showSortMenu && (
-        <View style={styles.sortMenu}>
-          <TouchableOpacity
-            style={styles.sortMenuItem}
-            onPress={() => {
-              setSortBy('default');
-              setShowSortMenu(false);
-            }}
-          >
-            <Text style={[styles.sortMenuText, sortBy === 'default' && styles.sortMenuTextActive]}>
-              Best Match (Curator Recommended)
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.sortMenuItem}
-            onPress={() => {
-              setSortBy('year_desc');
-              setShowSortMenu(false);
-            }}
-          >
-            <Text style={[styles.sortMenuText, sortBy === 'year_desc' && styles.sortMenuTextActive]}>
-              Publication Year (Newest First)
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.sortMenuItem}
-            onPress={() => {
-              setSortBy('year_asc');
-              setShowSortMenu(false);
-            }}
-          >
-            <Text style={[styles.sortMenuText, sortBy === 'year_asc' && styles.sortMenuTextActive]}>
-              Publication Year (Oldest First)
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.sortMenuItem}
-            onPress={() => {
-              setSortBy('title_asc');
-              setShowSortMenu(false);
-            }}
-          >
-            <Text style={[styles.sortMenuText, sortBy === 'title_asc' && styles.sortMenuTextActive]}>
-              Title (Alphabetical A-Z)
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      {/* Top Bar */}
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.navBar}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.iconHit}
           onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
         >
-          <ArrowLeft size={22} color="#0F172A" />
+          <ArrowLeft size={22} color={colors.espresso} />
         </TouchableOpacity>
-        <Text style={styles.navTitle}>20 Recommended Books</Text>
-        <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={loadRecommendations}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        <Text
+          style={[styles.navTitle, { fontSize: font.subtitle }]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
         >
-          <RefreshCw size={18} color="#4F46E5" />
+          Books for {readerName}
+        </Text>
+        <TouchableOpacity
+          style={styles.iconHit}
+          onPress={handleShare}
+          accessibilityRole="button"
+          accessibilityLabel="Share this book list"
+        >
+          <Share2 size={20} color={colors.cocoa} />
         </TouchableOpacity>
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4F46E5" />
-          <Text style={styles.loadingTitle}>Curating 20 Age-Appropriate Books...</Text>
-          <Text style={styles.loadingSubtitle}>
-            Auditing themes, checking reading levels for age {age}, and fetching verified book covers.
-          </Text>
-        </View>
+        <SkeletonGrid reduceMotion={reduceMotion} />
       ) : (
         <FlatList
           data={displayedBooks}
           keyExtractor={(item) => item.id}
+          numColumns={2}
           ListHeaderComponent={renderHeader}
+          ListFooterComponent={
+            <Text
+              style={[styles.footer, { fontSize: font.micro }]}
+              maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+            >
+              Powered by {sourceInfo}
+            </Text>
+          }
           renderItem={({ item }) => (
-            <BookCard
-              book={item}
-              targetAge={age}
-              isSaved={savedTitles.has(item.title.toLowerCase())}
-              onPress={() => navigation.navigate('BookDetail', { book: item, targetAge: age })}
-              onToggleSave={() => handleToggleSave(item)}
-            />
+            <View style={styles.gridItem}>
+              <BookCard
+                variant="grid"
+                book={item}
+                targetAge={age}
+                isSaved={savedTitles.has(item.title.toLowerCase())}
+                onPress={() => navigation.navigate('BookDetail', { book: item, targetAge: age })}
+                onToggleSave={() => handleToggleSave(item)}
+              />
+            </View>
           )}
+          columnWrapperStyle={styles.column}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <BottomSheetModal
+        ref={sortSheetRef}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        backdropComponent={renderBackdrop}
+        backgroundStyle={styles.sheet}
+        handleIndicatorStyle={styles.handle}
+      >
+        <BottomSheetView style={styles.sheetContent}>
+          <Text
+            style={[styles.sheetTitle, { fontSize: font.subtitle }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            Sort books
+          </Text>
+          {(Object.keys(SORT_LABELS) as SortOption[]).map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={styles.sortItem}
+              onPress={() => {
+                setSortBy(option);
+                sortSheetRef.current?.dismiss();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={SORT_LABELS[option]}
+              accessibilityState={{ selected: sortBy === option }}
+            >
+              <Text
+                style={[
+                  styles.sortItemText,
+                  { fontSize: font.body },
+                  sortBy === option && styles.sortItemTextActive,
+                ]}
+                maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+              >
+                {SORT_LABELS[option]}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </BottomSheetView>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 };
 
+function SkeletonGrid({ reduceMotion }: { reduceMotion: boolean }) {
+  const opacity = useRef(new Animated.Value(0.45)).current;
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.45, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity, reduceMotion]);
+
+  return (
+    <View style={styles.skeletonWrap}>
+      <Text style={styles.loadingTitle}>Curating 20 age-appropriate books…</Text>
+      <View style={styles.skeletonGrid}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Animated.View key={i} style={[styles.skeletonCard, { opacity }]} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.cream,
   },
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.linen,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
+    borderBottomColor: colors.parchment,
   },
-  backButton: {
-    padding: 4,
-  },
-  navTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  refreshButton: {
-    padding: 4,
-  },
-  loadingContainer: {
-    flex: 1,
+  iconHit: {
+    minWidth: HIT_TARGET,
+    minHeight: HIT_TARGET,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
   },
-  loadingTitle: {
-    fontSize: 16,
+  navTitle: {
     fontWeight: '700',
-    color: '#0F172A',
-    marginTop: 16,
+    color: colors.espresso,
+    flex: 1,
     textAlign: 'center',
-  },
-  loadingSubtitle: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 6,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  listContent: {
-    paddingBottom: 32,
   },
   headerArea: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 6,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
   },
-  summaryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 10,
-  },
-  summaryTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  ageBadge: {
-    backgroundColor: '#4F46E5',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  ageBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  totalCountText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#10B981',
-  },
-  interestQuote: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1E293B',
-    lineHeight: 20,
-    marginBottom: 6,
-  },
-  sourceRow: {
+  contextStrip: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#F6E6D4',
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
   },
-  sourceText: {
-    fontSize: 11,
-    color: '#6366F1',
-    fontWeight: '600',
-    marginLeft: 5,
-  },
-  safetyBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-    marginBottom: 10,
-  },
-  safetyBannerTextCol: {
-    marginLeft: 10,
+  contextText: {
     flex: 1,
-  },
-  safetyBannerTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#065F46',
-  },
-  safetyBannerDesc: {
-    fontSize: 11,
-    color: '#047857',
-    marginTop: 2,
-    lineHeight: 15,
+    color: colors.espresso,
+    fontWeight: '600',
   },
   errorNotice: {
-    backgroundColor: '#FEF2F2',
-    borderRadius: 8,
+    backgroundColor: '#F8E8E4',
+    borderRadius: radii.sm,
     padding: 8,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    marginBottom: 10,
+    marginBottom: spacing.sm,
   },
   errorText: {
-    fontSize: 11,
-    color: '#DC2626',
+    color: colors.rosewood,
   },
   filterScroll: {
     paddingVertical: 6,
   },
   filterChip: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 20,
+    backgroundColor: colors.parchment,
+    borderRadius: radii.xl,
     paddingHorizontal: 12,
-    paddingVertical: 5,
+    minHeight: HIT_TARGET,
+    justifyContent: 'center',
     marginRight: 6,
   },
   filterChipActive: {
-    backgroundColor: '#4F46E5',
-    borderColor: '#4F46E5',
+    backgroundColor: colors.honey,
   },
   filterChipText: {
-    fontSize: 11,
-    color: '#475569',
+    color: colors.dusty,
     fontWeight: '600',
   },
   filterChipTextActive: {
-    color: '#FFFFFF',
+    color: colors.espresso,
   },
   sortBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 8,
     marginBottom: 6,
   },
   resultsCount: {
-    fontSize: 12,
-    color: '#64748B',
+    color: colors.dusty,
     fontWeight: '500',
   },
   sortTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: colors.parchment,
+    minHeight: HIT_TARGET,
+    paddingHorizontal: 10,
+    borderRadius: radii.md,
   },
   sortTriggerText: {
-    fontSize: 11,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: colors.cocoa,
     marginLeft: 4,
   },
-  sortMenu: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingVertical: 4,
-    marginBottom: 8,
+  listContent: {
+    paddingBottom: spacing.xl,
   },
-  sortMenuItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  column: {
+    paddingHorizontal: spacing.sm,
   },
-  sortMenuText: {
-    fontSize: 12,
-    color: '#334155',
+  gridItem: {
+    flex: 1,
   },
-  sortMenuTextActive: {
+  footer: {
+    textAlign: 'center',
+    color: colors.dusty,
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  sheet: {
+    backgroundColor: colors.linen,
+  },
+  handle: {
+    backgroundColor: colors.dusty,
+  },
+  sheetContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  sheetTitle: {
     fontWeight: '700',
-    color: '#4F46E5',
+    color: colors.espresso,
+    marginBottom: spacing.sm,
+  },
+  sortItem: {
+    minHeight: HIT_TARGET,
+    justifyContent: 'center',
+  },
+  sortItemText: {
+    color: colors.espresso,
+  },
+  sortItemTextActive: {
+    fontWeight: '700',
+    color: colors.cocoa,
+  },
+  skeletonWrap: {
+    flex: 1,
+    padding: spacing.md,
+  },
+  loadingTitle: {
+    textAlign: 'center',
+    color: colors.espresso,
+    fontWeight: '700',
+    marginBottom: spacing.md,
+  },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  skeletonCard: {
+    width: '48%',
+    aspectRatio: 2 / 3,
+    backgroundColor: colors.parchment,
+    borderRadius: radii.lg,
+    marginBottom: spacing.sm,
   },
 });

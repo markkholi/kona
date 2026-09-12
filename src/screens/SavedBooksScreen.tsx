@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   FlatList,
   ScrollView,
   StyleSheet,
@@ -8,24 +9,31 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CompositeScreenProps } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import {
-  ArrowLeft,
-  Bookmark,
-  BookOpen,
-  Compass,
-  Trash2,
-} from 'lucide-react-native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import { Swipeable } from 'react-native-gesture-handler';
+import { BookOpen, Compass, Trash2 } from 'lucide-react-native';
 import { BookCard } from '../components/BookCard';
+import { ShareFab } from '../components/ShareFab';
 import { getSavedBooks, removeSavedBook } from '../services/storage';
+import { shareBookList } from '../services/share';
 import { BookRecommendation } from '../types/book';
-import { RootStackParamList } from '../types/navigation';
+import { SavedStackParamList, TabParamList } from '../types/navigation';
+import { useProfiles } from '../context/ProfileContext';
+import { colors, elevation, HIT_TARGET, radii, spacing } from '../theme/tokens';
+import { useScaledFont } from '../theme/useScaledFont';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'SavedBooks'>;
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<SavedStackParamList, 'SavedBooks'>,
+  BottomTabScreenProps<TabParamList>
+>;
 
 export const SavedBooksScreen: React.FC<Props> = ({ navigation }) => {
+  const { activeProfile } = useProfiles();
+  const font = useScaledFont();
   const [savedBooks, setSavedBooks] = useState<BookRecommendation[]>([]);
-  const [selectedGenre, setSelectedGenre] = useState<string>('All');
+  const [selectedGenre, setSelectedGenre] = useState('All');
 
   useEffect(() => {
     loadSaved();
@@ -33,16 +41,25 @@ export const SavedBooksScreen: React.FC<Props> = ({ navigation }) => {
       loadSaved();
     });
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, activeProfile?.id]);
 
   const loadSaved = async () => {
-    const list = await getSavedBooks();
+    if (!activeProfile) return;
+    const list = await getSavedBooks(activeProfile.id);
     setSavedBooks(list);
   };
 
   const handleRemove = async (book: BookRecommendation) => {
-    await removeSavedBook(book.id);
+    if (!activeProfile) return;
+    await removeSavedBook(book.id, activeProfile.id);
     setSavedBooks((prev) => prev.filter((b) => b.id !== book.id && b.title !== book.title));
+  };
+
+  const confirmRemove = (book: BookRecommendation) => {
+    Alert.alert('Remove book', `Remove “${book.title}” from ${activeProfile?.name}'s list?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => handleRemove(book) },
+    ]);
   };
 
   const genres = useMemo(() => {
@@ -58,41 +75,78 @@ export const SavedBooksScreen: React.FC<Props> = ({ navigation }) => {
     return savedBooks.filter((b) => b.genre === selectedGenre);
   }, [savedBooks, selectedGenre]);
 
+  const readerName = activeProfile?.name ?? 'Reader';
+
+  const renderRightActions = (book: BookRecommendation) => (
+    <TouchableOpacity
+      style={styles.swipeDelete}
+      onPress={() => confirmRemove(book)}
+      accessibilityRole="button"
+      accessibilityLabel={`Remove ${book.title}`}
+    >
+      <Trash2 size={20} color={colors.white} />
+      <Text style={styles.swipeDeleteText}>Remove</Text>
+    </TouchableOpacity>
+  );
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.navBar}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        <Text
+          style={[styles.navTitle, { fontSize: font.title }]}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
         >
-          <ArrowLeft size={22} color="#0F172A" />
-        </TouchableOpacity>
-        <Text style={styles.navTitle}>Saved Reading List</Text>
+          My Bookshelf
+        </Text>
         <View style={styles.countBadge}>
-          <Text style={styles.countBadgeText}>{savedBooks.length}</Text>
+          <Text
+            style={[styles.countBadgeText, { fontSize: font.caption }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            {savedBooks.length}
+          </Text>
         </View>
       </View>
 
       {savedBooks.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconCircle}>
-            <Bookmark size={40} color="#94A3B8" />
+          <View style={styles.emptyStack}>
+            <BookOpen size={28} color={colors.honey} />
+            <BookOpen size={36} color={colors.cocoa} style={styles.emptyMid} />
+            <BookOpen size={28} color={colors.sage} />
           </View>
-          <Text style={styles.emptyTitle}>Your Reading List is Empty</Text>
-          <Text style={styles.emptySubtitle}>
-            Save any book recommendations you want to look into, check out from the library, or discuss with parents and teachers.
+          <Text
+            style={[styles.emptyTitle, { fontSize: font.hero }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            Start saving books you love
+          </Text>
+          <Text
+            style={[styles.emptySubtitle, { fontSize: font.body }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            Discover 20 age-audited books and tap the heart to keep them on {readerName}'s shelf.
           </Text>
           <TouchableOpacity
             style={styles.exploreBtn}
-            onPress={() => navigation.navigate('Home')}
+            onPress={() => navigation.navigate('DiscoverTab')}
+            accessibilityRole="button"
+            accessibilityLabel="Discover books"
           >
-            <Compass size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-            <Text style={styles.exploreBtnText}>Find Book Recommendations</Text>
+            <Compass size={18} color={colors.white} style={{ marginRight: 8 }} />
+            <Text style={styles.exploreBtnText}>Discover Books</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <View style={{ flex: 1 }}>
+          <View style={styles.profileBadge}>
+            <Text
+              style={[styles.profileBadgeText, { fontSize: font.caption }]}
+              maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+            >
+              Showing {readerName}'s saved books ({savedBooks.length})
+            </Text>
+          </View>
           {genres.length > 2 && (
             <View style={styles.filterBar}>
               <ScrollView
@@ -107,12 +161,17 @@ export const SavedBooksScreen: React.FC<Props> = ({ navigation }) => {
                       key={g}
                       style={[styles.filterChip, isSelected && styles.filterChipActive]}
                       onPress={() => setSelectedGenre(g)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Filter ${g}`}
+                      accessibilityState={{ selected: isSelected }}
                     >
                       <Text
                         style={[
                           styles.filterChipText,
+                          { fontSize: font.caption },
                           isSelected && styles.filterChipTextActive,
                         ]}
+                        maxFontSizeMultiplier={font.maxFontSizeMultiplier}
                       >
                         {g}
                       </Text>
@@ -128,21 +187,26 @@ export const SavedBooksScreen: React.FC<Props> = ({ navigation }) => {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => (
-              <View style={styles.cardContainer}>
+              <Swipeable renderRightActions={() => renderRightActions(item)} overshootRight={false}>
                 <BookCard
+                  variant="list"
                   book={item}
                   targetAge={item.recommendedAgeMin}
-                  isSaved={true}
+                  isSaved
                   onPress={() =>
                     navigation.navigate('BookDetail', {
                       book: item,
                       targetAge: item.recommendedAgeMin,
                     })
                   }
-                  onToggleSave={() => handleRemove(item)}
+                  onToggleSave={() => confirmRemove(item)}
                 />
-              </View>
+              </Swipeable>
             )}
+          />
+          <ShareFab
+            onPress={() => shareBookList(savedBooks, undefined, undefined, readerName)}
+            accessibilityLabel={`Share ${readerName}'s saved book list`}
           />
         </View>
       )}
@@ -153,71 +217,85 @@ export const SavedBooksScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.cream,
   },
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.linen,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-  },
-  backButton: {
-    padding: 4,
+    borderBottomColor: colors.parchment,
   },
   navTitle: {
-    fontSize: 16,
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.espresso,
   },
   countBadge: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
+    backgroundColor: colors.parchment,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radii.xl,
+    minHeight: HIT_TARGET - 12,
+    justifyContent: 'center',
   },
   countBadgeText: {
-    fontSize: 12,
     fontWeight: '800',
-    color: '#4F46E5',
+    color: colors.cocoa,
+  },
+  profileBadge: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  profileBadgeText: {
+    color: colors.dusty,
+    fontWeight: '600',
   },
   filterBar: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
   filterScroll: {
     flexDirection: 'row',
   },
   filterChip: {
-    backgroundColor: '#F1F5F9',
-    borderRadius: 20,
+    backgroundColor: colors.parchment,
+    borderRadius: radii.xl,
     paddingHorizontal: 12,
-    paddingVertical: 5,
+    minHeight: HIT_TARGET,
+    justifyContent: 'center',
     marginRight: 6,
   },
   filterChipActive: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.honey,
   },
   filterChipText: {
-    fontSize: 11,
-    color: '#475569',
+    color: colors.dusty,
     fontWeight: '600',
   },
   filterChipTextActive: {
-    color: '#FFFFFF',
+    color: colors.espresso,
   },
   listContent: {
     paddingVertical: 8,
-    paddingBottom: 32,
+    paddingBottom: 96,
   },
-  cardContainer: {
-    marginBottom: 4,
+  swipeDelete: {
+    backgroundColor: colors.rosewood,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 88,
+    marginVertical: 6,
+    marginRight: spacing.md,
+    borderRadius: radii.lg,
+  },
+  swipeDeleteText: {
+    color: colors.white,
+    fontWeight: '700',
+    fontSize: 11,
+    marginTop: 4,
   },
   emptyContainer: {
     flex: 1,
@@ -225,44 +303,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 36,
   },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#EEF2FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
+  emptyStack: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: spacing.md,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
+  emptyMid: {
+    marginHorizontal: -6,
     marginBottom: 8,
   },
-  emptySubtitle: {
-    fontSize: 13,
-    color: '#64748B',
+  emptyTitle: {
+    fontWeight: '800',
+    color: colors.espresso,
+    marginBottom: 8,
     textAlign: 'center',
-    lineHeight: 18,
+    letterSpacing: -0.5,
+  },
+  emptySubtitle: {
+    color: colors.dusty,
+    textAlign: 'center',
+    lineHeight: 22,
     marginBottom: 20,
   },
   exploreBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4F46E5',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 12,
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
+    backgroundColor: colors.cocoa,
+    minHeight: 56,
+    paddingHorizontal: 20,
+    borderRadius: radii.md,
+    ...elevation.medium,
   },
   exploreBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.white,
   },
 });
