@@ -1,29 +1,44 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { ShieldCheck, AlertTriangle, CheckCircle, Info } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ShieldCheck, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Info } from 'lucide-react-native';
 import { AGE_PROFILES, getMaturityColor, isAgeAppropriate } from '../constants/ageRubric';
 import { BookRecommendation } from '../types/book';
+import { colors, elevation, HIT_TARGET, radii, spacing } from '../theme/tokens';
+import { useScaledFont } from '../theme/useScaledFont';
 
 interface AgeAuditCardProps {
   book: BookRecommendation;
   targetAge: number;
+  collapsible?: boolean;
 }
 
-export const AgeAuditCard: React.FC<AgeAuditCardProps> = ({ book, targetAge }) => {
+export const AgeAuditCard: React.FC<AgeAuditCardProps> = ({
+  book,
+  targetAge,
+  collapsible = false,
+}) => {
+  const [expanded, setExpanded] = useState(!collapsible);
+  const font = useScaledFont();
   const profile = AGE_PROFILES[targetAge] || AGE_PROFILES[14];
   const audit = isAgeAppropriate(targetAge, book.maturityScores);
 
-  const renderMaturityBar = (
-    label: string,
-    current: string,
-    maxAllowed: string
-  ) => {
+  const renderMaturityBar = (label: string, current: string, maxAllowed: string) => {
     const color = getMaturityColor(current);
     return (
       <View style={styles.metricRow} key={label}>
         <View style={styles.metricLabelCol}>
-          <Text style={styles.metricLabel}>{label}</Text>
-          <Text style={styles.metricLimit}>Max for age: {maxAllowed}</Text>
+          <Text
+            style={[styles.metricLabel, { fontSize: font.caption }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            {label}
+          </Text>
+          <Text
+            style={[styles.metricLimit, { fontSize: font.micro }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            Max for age: {maxAllowed}
+          </Text>
         </View>
         <View style={[styles.metricPill, { backgroundColor: `${color}15`, borderColor: color }]}>
           <Text style={[styles.metricValue, { color }]}>{current}</Text>
@@ -32,34 +47,89 @@ export const AgeAuditCard: React.FC<AgeAuditCardProps> = ({ book, targetAge }) =
     );
   };
 
+  if (collapsible && !expanded) {
+    return (
+      <TouchableOpacity
+        style={styles.pill}
+        onPress={() => setExpanded(true)}
+        accessibilityRole="button"
+        accessibilityLabel={
+          audit.isAppropriate
+            ? `Verified for age ${targetAge}. Expand age audit.`
+            : `Content advisory for age ${targetAge}. Expand age audit.`
+        }
+        accessibilityState={{ expanded: false }}
+      >
+        {audit.isAppropriate ? (
+          <CheckCircle size={16} color={colors.white} />
+        ) : (
+          <AlertTriangle size={16} color={colors.white} />
+        )}
+        <Text
+          style={[styles.pillText, { fontSize: font.caption }]}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+        >
+          {audit.isAppropriate
+            ? `Verified for Age ${targetAge}`
+            : `Content advisory · Age ${targetAge}`}
+        </Text>
+        <ChevronDown size={16} color={colors.white} />
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
-          <ShieldCheck size={22} color="#10B981" />
-          <Text style={styles.headerTitle}>Age-Appropriateness Audit</Text>
+          <ShieldCheck size={22} color={colors.sage} />
+          <Text
+            style={[styles.headerTitle, { fontSize: font.subtitle }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            Age-Appropriateness Audit
+          </Text>
         </View>
-        <View style={styles.statusBadge}>
-          {audit.isAppropriate ? (
-            <View style={styles.verifiedRow}>
-              <CheckCircle size={14} color="#059669" />
-              <Text style={styles.verifiedText}>Approved for Age {targetAge}</Text>
-            </View>
-          ) : (
-            <View style={styles.advisoryRow}>
-              <AlertTriangle size={14} color="#D97706" />
-              <Text style={styles.advisoryText}>Content Advisory</Text>
-            </View>
-          )}
-        </View>
+        {collapsible ? (
+          <TouchableOpacity
+            onPress={() => setExpanded(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Collapse age audit"
+            accessibilityState={{ expanded: true }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.collapseBtn}
+          >
+            <ChevronUp size={18} color={colors.dusty} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.statusBadge}>
+            {audit.isAppropriate ? (
+              <View style={styles.verifiedRow}>
+                <CheckCircle size={14} color={colors.sage} />
+                <Text style={styles.verifiedText}>Approved for Age {targetAge}</Text>
+              </View>
+            ) : (
+              <View style={styles.advisoryRow}>
+                <AlertTriangle size={14} color="#D97706" />
+                <Text style={styles.advisoryText}>Content Advisory</Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
-      {/* Target Age Fit Bar */}
       <View style={styles.rangeSection}>
         <View style={styles.rangeHeader}>
-          <Text style={styles.rangeTitle}>Recommended Reader Range</Text>
-          <Text style={styles.rangeValue}>
+          <Text
+            style={[styles.rangeTitle, { fontSize: font.caption }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            Recommended Reader Range
+          </Text>
+          <Text
+            style={[styles.rangeValue, { fontSize: font.body }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
             Ages {book.recommendedAgeMin} – {book.recommendedAgeMax}
           </Text>
         </View>
@@ -74,7 +144,6 @@ export const AgeAuditCard: React.FC<AgeAuditCardProps> = ({ book, targetAge }) =
                 },
               ]}
             />
-            {/* Target Age Pin */}
             <View
               style={[
                 styles.gaugePin,
@@ -94,85 +163,136 @@ export const AgeAuditCard: React.FC<AgeAuditCardProps> = ({ book, targetAge }) =
         </View>
       </View>
 
-      {/* 4-Factor Content Safety Matrix */}
       <View style={styles.matrixSection}>
-        <Text style={styles.sectionSubtitle}>Maturity & Content Safety Matrix</Text>
+        <Text
+          style={[styles.sectionSubtitle, { fontSize: font.body }]}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+        >
+          Maturity & Content Safety Matrix
+        </Text>
         {renderMaturityBar('Violence & Peril', book.maturityScores.violence, profile.maxRecommendedViolence)}
         {renderMaturityBar('Language & Slang', book.maturityScores.language, profile.maxRecommendedLanguage)}
         {renderMaturityBar('Romance & Intimacy', book.maturityScores.romance, profile.maxRecommendedRomance)}
         {renderMaturityBar('Dark & Sensitive Themes', book.maturityScores.themes, profile.maxRecommendedThemes)}
       </View>
 
-      {/* Educator Validation Statement */}
       <View style={styles.statementSection}>
         <View style={styles.statementHeader}>
-          <Info size={16} color="#4F46E5" />
-          <Text style={styles.statementTitle}>Educator Validation Rationale</Text>
+          <Info size={16} color={colors.cocoa} />
+          <Text
+            style={[styles.statementTitle, { fontSize: font.caption }]}
+            maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+          >
+            Educator Validation Rationale
+          </Text>
         </View>
-        <Text style={styles.statementText}>{book.whyAppropriate}</Text>
+        <Text
+          style={[styles.statementText, { fontSize: font.caption }]}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+        >
+          {book.whyAppropriate}
+        </Text>
       </View>
 
-      {/* Content Heads-Up / Warnings */}
       <View style={styles.warningsSection}>
-        <Text style={styles.sectionSubtitle}>Content Heads-Up for Parents & Educators</Text>
+        <Text
+          style={[styles.sectionSubtitle, { fontSize: font.body }]}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+        >
+          Content Heads-Up for Parents & Educators
+        </Text>
         {book.contentWarnings && book.contentWarnings.length > 0 ? (
           book.contentWarnings.map((warning, idx) => (
             <View key={idx} style={styles.warningItem}>
               <View style={styles.warningBullet} />
-              <Text style={styles.warningText}>{warning}</Text>
+              <Text
+                style={[styles.warningText, { fontSize: font.caption }]}
+                maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+              >
+                {warning}
+              </Text>
             </View>
           ))
         ) : (
           <View style={styles.cleanBadge}>
-            <CheckCircle size={14} color="#059669" />
-            <Text style={styles.cleanText}>
+            <CheckCircle size={14} color={colors.sage} />
+            <Text
+              style={[styles.cleanText, { fontSize: font.caption }]}
+              maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+            >
               No sensitive content or triggers flagged for {profile.grade} readers.
             </Text>
           </View>
         )}
       </View>
 
-      {/* Reading Complexity & Lexile */}
       <View style={styles.levelRow}>
-        <Text style={styles.levelLabel}>Reading Level / Lexile:</Text>
-        <Text style={styles.levelValue}>{book.readingLevel}</Text>
+        <Text
+          style={[styles.levelLabel, { fontSize: font.caption }]}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+        >
+          Reading Level / Lexile:
+        </Text>
+        <Text
+          style={[styles.levelValue, { fontSize: font.caption }]}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+        >
+          {book.readingLevel}
+        </Text>
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.sage,
+    borderRadius: radii.xl,
+    paddingHorizontal: spacing.md,
+    minHeight: HIT_TARGET,
+    marginVertical: spacing.sm,
+  },
+  pillText: {
+    color: colors.white,
+    fontWeight: '700',
+    flex: 1,
+    marginLeft: spacing.sm,
+  },
   container: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginVertical: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    backgroundColor: colors.linen,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginVertical: spacing.sm,
+    ...elevation.low,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: colors.parchment,
     paddingBottom: 12,
     marginBottom: 14,
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
   },
   headerTitle: {
-    fontSize: 16,
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.espresso,
     marginLeft: 8,
+    flex: 1,
+  },
+  collapseBtn: {
+    minWidth: HIT_TARGET,
+    minHeight: HIT_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statusBadge: {
     alignItems: 'flex-end',
@@ -180,7 +300,7 @@ const styles = StyleSheet.create({
   verifiedRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#EEF6F1',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
@@ -188,7 +308,7 @@ const styles = StyleSheet.create({
   verifiedText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#065F46',
+    color: colors.sage,
     marginLeft: 4,
   },
   advisoryRow: {
@@ -207,8 +327,8 @@ const styles = StyleSheet.create({
   },
   rangeSection: {
     marginBottom: 16,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
+    backgroundColor: colors.parchment,
+    borderRadius: radii.md,
     padding: 12,
   },
   rangeHeader: {
@@ -218,13 +338,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   rangeTitle: {
-    fontSize: 12,
-    color: '#64748B',
+    color: colors.dusty,
     fontWeight: '600',
+    flex: 1,
+    marginRight: 8,
   },
   rangeValue: {
-    fontSize: 13,
-    color: '#0F172A',
+    color: colors.espresso,
     fontWeight: '700',
   },
   gaugeContainer: {
@@ -232,7 +352,7 @@ const styles = StyleSheet.create({
   },
   gaugeTrack: {
     height: 8,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: colors.parchment,
     borderRadius: 4,
     position: 'relative',
   },
@@ -240,7 +360,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     bottom: 0,
-    backgroundColor: '#818CF8',
+    backgroundColor: colors.honey,
     borderRadius: 4,
   },
   gaugePin: {
@@ -253,14 +373,14 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.cocoa,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: colors.white,
   },
   pinText: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: colors.cocoa,
     marginTop: 4,
   },
   gaugeLabels: {
@@ -270,15 +390,14 @@ const styles = StyleSheet.create({
   },
   gaugeEndLabel: {
     fontSize: 10,
-    color: '#94A3B8',
+    color: colors.dusty,
   },
   matrixSection: {
     marginBottom: 16,
   },
   sectionSubtitle: {
-    fontSize: 13,
     fontWeight: '700',
-    color: '#334155',
+    color: colors.espresso,
     marginBottom: 8,
   },
   metricRow: {
@@ -287,19 +406,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
+    borderBottomColor: colors.parchment,
   },
   metricLabelCol: {
     flex: 1,
   },
   metricLabel: {
-    fontSize: 12,
     fontWeight: '600',
-    color: '#1E293B',
+    color: colors.espresso,
   },
   metricLimit: {
-    fontSize: 10,
-    color: '#475569',
+    color: colors.dusty,
     marginTop: 2,
     fontWeight: '500',
   },
@@ -314,12 +431,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statementSection: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
+    backgroundColor: colors.parchment,
+    borderRadius: radii.md,
     padding: 12,
     marginBottom: 14,
     borderLeftWidth: 3,
-    borderLeftColor: '#4F46E5',
+    borderLeftColor: colors.honey,
   },
   statementHeader: {
     flexDirection: 'row',
@@ -327,14 +444,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statementTitle: {
-    fontSize: 12,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: colors.cocoa,
     marginLeft: 6,
   },
   statementText: {
-    fontSize: 12,
-    color: '#334155',
+    color: colors.espresso,
     lineHeight: 18,
   },
   warningsSection: {
@@ -349,41 +464,39 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: '#F59E0B',
+    backgroundColor: colors.honey,
     marginRight: 8,
   },
   warningText: {
-    fontSize: 12,
-    color: '#475569',
+    color: colors.dusty,
+    flex: 1,
   },
   cleanBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#EEF6F1',
     padding: 8,
     borderRadius: 6,
   },
   cleanText: {
-    fontSize: 12,
-    color: '#065F46',
+    color: colors.sage,
     marginLeft: 6,
     fontWeight: '500',
+    flex: 1,
   },
   levelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: colors.parchment,
   },
   levelLabel: {
-    fontSize: 12,
-    color: '#64748B',
+    color: colors.dusty,
     fontWeight: '500',
   },
   levelValue: {
-    fontSize: 12,
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.espresso,
   },
 });

@@ -1,6 +1,7 @@
 import { AGE_PROFILES, isAgeAppropriate } from '../src/constants/ageRubric';
 import { getMockRecommendations } from '../src/services/mockBooks';
 import { fetchGoogleBookMetadata } from '../src/services/googleBooks';
+import { getProfileStorageKey } from '../src/services/storage';
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -73,6 +74,17 @@ async function runTests() {
   } catch (e: any) {
     console.log('Network request handled gracefully:', e?.message);
   }
+
+  console.log('\nTest 5: Profile-scoped storage keys');
+  assert(
+    getProfileStorageKey('abc123', '@kona_saved_books_v1') === '@kona_saved_books_abc123_v1',
+    'Saved books key should be profile-scoped'
+  );
+  assert(
+    getProfileStorageKey('abc123', '@kona_search_history_v1') === '@kona_search_history_abc123_v1',
+    'Search history key should be profile-scoped'
+  );
+  console.log('Profile storage key helper maps legacy keys to per-profile keys.');
 
   console.log('\nALL KONA LOGIC TESTS PASSED!');
 }

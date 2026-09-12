@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,41 +15,61 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  ArrowLeft,
-  CheckCircle2,
+  Check,
   ChevronDown,
   ChevronUp,
   Cpu,
   Eye,
   EyeOff,
   Key,
+  Plus,
   Save,
   Shield,
   Trash2,
+  Users,
 } from 'lucide-react-native';
 import { AGE_PROFILES } from '../constants/ageRubric';
 import {
+  clearAllRecentSearches,
   clearRecentSearches,
   getApiSettings,
   saveApiSettings,
 } from '../services/storage';
 import { ApiSettings } from '../types/book';
-import { RootStackParamList } from '../types/navigation';
+import { SettingsStackParamList } from '../types/navigation';
+import { MAX_PROFILES, ReaderProfile } from '../types/profile';
+import { useProfiles } from '../context/ProfileContext';
+import { getAvatarColor } from '../components/ProfileSwitcher';
+import { colors, elevation, HIT_TARGET, radii, spacing } from '../theme/tokens';
+import { useScaledFont } from '../theme/useScaledFont';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
+type Props = NativeStackScreenProps<SettingsStackParamList, 'Settings'>;
 
-export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
+const AGES = [10, 11, 12, 13, 14, 15, 16, 17];
+
+type EditorState =
+  | { mode: 'add' }
+  | { mode: 'edit'; profile: ReaderProfile }
+  | null;
+
+export const SettingsScreen: React.FC<Props> = () => {
+  const { profiles, activeProfile, addProfile, updateProfile, deleteProfile, switchProfile } =
+    useProfiles();
+  const font = useScaledFont();
+
   const [settings, setSettings] = useState<ApiSettings>({
     provider: 'mock',
     geminiApiKey: '',
     openaiApiKey: '',
   });
-
-  const [showGeminiKey, setShowGeminiKey] = useState<boolean>(false);
-  const [showOpenAiKey, setShowOpenAiKey] = useState<boolean>(false);
-  const [testingConnection, setTestingConnection] = useState<boolean>(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [showOpenAiKey, setShowOpenAiKey] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [expandedAge, setExpandedAge] = useState<number | null>(null);
+  const [editor, setEditor] = useState<EditorState>(null);
+  const [editName, setEditName] = useState('');
+  const [editAge, setEditAge] = useState(12);
 
   useEffect(() => {
     loadSettings();
@@ -74,18 +95,12 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     }
 
     if (settings.provider === 'gemini' && !settings.geminiApiKey.trim()) {
-      setTestResult({
-        success: false,
-        message: 'Please paste your Google Gemini API key first.',
-      });
+      setTestResult({ success: false, message: 'Please paste your Google Gemini API key first.' });
       return;
     }
 
     if (settings.provider === 'openai' && !settings.openaiApiKey.trim()) {
-      setTestResult({
-        success: false,
-        message: 'Please paste your OpenAI API key first.',
-      });
+      setTestResult({ success: false, message: 'Please paste your OpenAI API key first.' });
       return;
     }
 
@@ -103,10 +118,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           }),
         });
         if (resp.ok) {
-          setTestResult({
-            success: true,
-            message: 'Connected to Gemini API successfully!',
-          });
+          setTestResult({ success: true, message: 'Connected to Gemini API successfully!' });
         } else {
           const err = await resp.text();
           setTestResult({
@@ -119,10 +131,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           headers: { Authorization: `Bearer ${settings.openaiApiKey.trim()}` },
         });
         if (resp.ok) {
-          setTestResult({
-            success: true,
-            message: 'Connected to OpenAI API successfully!',
-          });
+          setTestResult({ success: true, message: 'Connected to OpenAI API successfully!' });
         } else {
           const err = await resp.text();
           setTestResult({
@@ -132,10 +141,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         }
       }
     } catch (e: any) {
-      setTestResult({
-        success: false,
-        message: e?.message || 'Network connection failed.',
-      });
+      setTestResult({ success: false, message: e?.message || 'Network connection failed.' });
     } finally {
       setTestingConnection(false);
     }
@@ -144,15 +150,64 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const handleClearHistory = () => {
     Alert.alert(
       'Clear Search History',
-      'Are you sure you want to clear your recent searches?',
+      'Clear recent searches for this reader only, or for all readers on this device?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Clear',
+          text: 'This reader',
+          onPress: async () => {
+            if (!activeProfile) return;
+            await clearRecentSearches(activeProfile.id);
+            Alert.alert('Cleared', `Search history cleared for ${activeProfile.name}.`);
+          },
+        },
+        {
+          text: 'All readers',
           style: 'destructive',
           onPress: async () => {
-            await clearRecentSearches();
-            Alert.alert('Cleared', 'Search history cleared.');
+            await clearAllRecentSearches(profiles.map((p) => p.id));
+            Alert.alert('Cleared', 'Search history cleared for all readers.');
+          },
+        },
+      ]
+    );
+  };
+
+  const openAdd = () => {
+    setEditName('');
+    setEditAge(12);
+    setEditor({ mode: 'add' });
+  };
+
+  const openEdit = (profile: ReaderProfile) => {
+    setEditName(profile.name);
+    setEditAge(profile.age);
+    setEditor({ mode: 'edit', profile });
+  };
+
+  const saveEditor = async () => {
+    if (!editor) return;
+    if (editor.mode === 'add') {
+      const created = await addProfile(editName, editAge);
+      if (created) setEditor(null);
+    } else {
+      await updateProfile(editor.profile.id, { name: editName, age: editAge });
+      setEditor(null);
+    }
+  };
+
+  const confirmDelete = (profile: ReaderProfile) => {
+    Alert.alert(
+      'Delete profile',
+      `Delete ${profile.name}? Their saved books and search history will be removed from this device.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const ok = await deleteProfile(profile.id);
+            if (ok) setEditor(null);
           },
         },
       ]
@@ -160,18 +215,21 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.navBar}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        <Text
+          style={[styles.navTitle, { fontSize: font.title }]}
+          maxFontSizeMultiplier={font.maxFontSizeMultiplier}
         >
-          <ArrowLeft size={22} color="#0F172A" />
-        </TouchableOpacity>
-        <Text style={styles.navTitle}>Settings & Configuration</Text>
-        <TouchableOpacity style={styles.saveIconButton} onPress={handleSave}>
-          <Save size={20} color="#4F46E5" />
+          Settings
+        </Text>
+        <TouchableOpacity
+          style={styles.saveIconButton}
+          onPress={handleSave}
+          accessibilityRole="button"
+          accessibilityLabel="Save settings"
+        >
+          <Save size={20} color={colors.cocoa} />
         </TouchableOpacity>
       </View>
 
@@ -184,86 +242,133 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Provider Selection */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Cpu size={18} color="#4F46E5" />
-              <Text style={styles.sectionTitle}>Recommendation Engine Provider</Text>
+              <Users size={18} color={colors.cocoa} />
+              <Text
+                style={[styles.sectionTitle, { fontSize: font.subtitle }]}
+                maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+              >
+                Reader Profiles
+              </Text>
             </View>
-            <Text style={styles.sectionDesc}>
+            <Text
+              style={[styles.sectionDesc, { fontSize: font.caption }]}
+              maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+            >
+              Names stay on this device. Recommendations only send age and interest.
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {profiles.map((profile) => {
+                const isActive = profile.id === activeProfile?.id;
+                const initial = (profile.name.trim()[0] || 'R').toUpperCase();
+                return (
+                  <TouchableOpacity
+                    key={profile.id}
+                    style={[styles.profileCard, isActive && styles.profileCardActive]}
+                    onPress={() => switchProfile(profile.id)}
+                    onLongPress={() => openEdit(profile)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${profile.name}, age ${profile.age}`}
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <View style={[styles.avatar, { backgroundColor: getAvatarColor(profile.avatarIndex) }]}>
+                      <Text style={styles.initial}>{initial}</Text>
+                    </View>
+                    <Text
+                      style={[styles.profileName, { fontSize: font.caption }]}
+                      numberOfLines={1}
+                      maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+                    >
+                      {profile.name}
+                    </Text>
+                    <Text
+                      style={[styles.profileAge, { fontSize: font.micro }]}
+                      maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+                    >
+                      Age {profile.age}
+                    </Text>
+                    {isActive ? <Check size={14} color={colors.honey} /> : null}
+                    <TouchableOpacity
+                      style={styles.editMini}
+                      onPress={() => openEdit(profile)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${profile.name}`}
+                    >
+                      <Text style={styles.editMiniText}>Edit</Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                );
+              })}
+              {profiles.length < MAX_PROFILES ? (
+                <TouchableOpacity
+                  style={styles.addCard}
+                  onPress={openAdd}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add reader"
+                >
+                  <Plus size={22} color={colors.cocoa} />
+                  <Text
+                    style={[styles.addCardText, { fontSize: font.caption }]}
+                    maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+                  >
+                    Add Reader
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </ScrollView>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Cpu size={18} color={colors.cocoa} />
+              <Text
+                style={[styles.sectionTitle, { fontSize: font.subtitle }]}
+                maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+              >
+                Recommendation Engine
+              </Text>
+            </View>
+            <Text
+              style={[styles.sectionDesc, { fontSize: font.caption }]}
+              maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+            >
               Choose how Kona curates 20 age-appropriate books per request.
             </Text>
 
-            {/* Provider Option: Mock / Curated */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={[
-                styles.providerCard,
-                settings.provider === 'mock' && styles.providerCardActive,
-              ]}
+            <ProviderOption
+              selected={settings.provider === 'mock'}
+              name="Kona Curated Educator Library"
+              badge="Built-in • No API Key Needed"
+              sub="Fast, reliable, pre-vetted catalog across ages 10-17 with Google Books cover enrichment."
               onPress={() => setSettings({ ...settings, provider: 'mock' })}
-            >
-              <View style={styles.radioRow}>
-                <View style={[styles.radio, settings.provider === 'mock' && styles.radioActive]} />
-                <View style={styles.providerInfo}>
-                  <Text style={styles.providerName}>Kona Curated Educator Library</Text>
-                  <Text style={styles.providerBadge}>Built-in • No API Key Needed</Text>
-                  <Text style={styles.providerSub}>
-                    Fast, reliable, pre-vetted catalog across ages 10-17 with Google Books cover enrichment.
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            {/* Provider Option: Gemini */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={[
-                styles.providerCard,
-                settings.provider === 'gemini' && styles.providerCardActive,
-              ]}
+            />
+            <ProviderOption
+              selected={settings.provider === 'gemini'}
+              name="Google Gemini AI (2.5 Flash)"
+              badge="Requires Gemini API Key"
+              sub="Unlimited creative breadth, nuanced sub-genre tailoring, and live educator reasoning."
               onPress={() => setSettings({ ...settings, provider: 'gemini' })}
-            >
-              <View style={styles.radioRow}>
-                <View style={[styles.radio, settings.provider === 'gemini' && styles.radioActive]} />
-                <View style={styles.providerInfo}>
-                  <Text style={styles.providerName}>Google Gemini AI (2.5 Flash)</Text>
-                  <Text style={styles.providerBadge}>Requires Gemini API Key</Text>
-                  <Text style={styles.providerSub}>
-                    Unlimited creative breadth, nuanced sub-genre tailoring, and live educator reasoning.
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            {/* Provider Option: OpenAI */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={[
-                styles.providerCard,
-                settings.provider === 'openai' && styles.providerCardActive,
-              ]}
+            />
+            <ProviderOption
+              selected={settings.provider === 'openai'}
+              name="OpenAI (GPT-4o-mini)"
+              badge="Requires OpenAI API Key"
+              sub="Rigorous literary analysis and structured age suitability classification."
               onPress={() => setSettings({ ...settings, provider: 'openai' })}
-            >
-              <View style={styles.radioRow}>
-                <View style={[styles.radio, settings.provider === 'openai' && styles.radioActive]} />
-                <View style={styles.providerInfo}>
-                  <Text style={styles.providerName}>OpenAI (GPT-4o-mini)</Text>
-                  <Text style={styles.providerBadge}>Requires OpenAI API Key</Text>
-                  <Text style={styles.providerSub}>
-                    Rigorous literary analysis and structured age suitability classification.
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
+            />
           </View>
 
-          {/* API Key Inputs */}
           {settings.provider !== 'mock' && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Key size={18} color="#4F46E5" />
-                <Text style={styles.sectionTitle}>API Credentials</Text>
+                <Key size={18} color={colors.cocoa} />
+                <Text
+                  style={[styles.sectionTitle, { fontSize: font.subtitle }]}
+                  maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+                >
+                  API Credentials
+                </Text>
               </View>
 
               {settings.provider === 'gemini' && (
@@ -275,19 +380,22 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                       value={settings.geminiApiKey}
                       onChangeText={(t) => setSettings({ ...settings, geminiApiKey: t })}
                       placeholder="AIzaSy..."
-                      placeholderTextColor="#94A3B8"
+                      placeholderTextColor={colors.dusty}
                       secureTextEntry={!showGeminiKey}
                       autoCapitalize="none"
                       autoCorrect={false}
+                      accessibilityLabel="Gemini API key"
                     />
                     <TouchableOpacity
                       style={styles.eyeBtn}
                       onPress={() => setShowGeminiKey(!showGeminiKey)}
+                      accessibilityRole="button"
+                      accessibilityLabel={showGeminiKey ? 'Hide Gemini key' : 'Show Gemini key'}
                     >
                       {showGeminiKey ? (
-                        <EyeOff size={18} color="#64748B" />
+                        <EyeOff size={18} color={colors.dusty} />
                       ) : (
-                        <Eye size={18} color="#64748B" />
+                        <Eye size={18} color={colors.dusty} />
                       )}
                     </TouchableOpacity>
                   </View>
@@ -303,33 +411,37 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                       value={settings.openaiApiKey}
                       onChangeText={(t) => setSettings({ ...settings, openaiApiKey: t })}
                       placeholder="sk-proj-..."
-                      placeholderTextColor="#94A3B8"
+                      placeholderTextColor={colors.dusty}
                       secureTextEntry={!showOpenAiKey}
                       autoCapitalize="none"
                       autoCorrect={false}
+                      accessibilityLabel="OpenAI API key"
                     />
                     <TouchableOpacity
                       style={styles.eyeBtn}
                       onPress={() => setShowOpenAiKey(!showOpenAiKey)}
+                      accessibilityRole="button"
+                      accessibilityLabel={showOpenAiKey ? 'Hide OpenAI key' : 'Show OpenAI key'}
                     >
                       {showOpenAiKey ? (
-                        <EyeOff size={18} color="#64748B" />
+                        <EyeOff size={18} color={colors.dusty} />
                       ) : (
-                        <Eye size={18} color="#64748B" />
+                        <Eye size={18} color={colors.dusty} />
                       )}
                     </TouchableOpacity>
                   </View>
                 </View>
               )}
 
-              {/* Test Connection Button */}
               <TouchableOpacity
                 style={styles.testBtn}
                 onPress={handleTestConnection}
                 disabled={testingConnection}
+                accessibilityRole="button"
+                accessibilityLabel="Test connection"
               >
                 {testingConnection ? (
-                  <ActivityIndicator size="small" color="#4F46E5" />
+                  <ActivityIndicator size="small" color={colors.cocoa} />
                 ) : (
                   <Text style={styles.testBtnText}>Test Connection</Text>
                 )}
@@ -355,13 +467,20 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           )}
 
-          {/* Age Appropriateness Rubric Reference */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Shield size={18} color="#10B981" />
-              <Text style={styles.sectionTitle}>Developmental Age Rubrics (10–17)</Text>
+              <Shield size={18} color={colors.sage} />
+              <Text
+                style={[styles.sectionTitle, { fontSize: font.subtitle }]}
+                maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+              >
+                Age Rubrics
+              </Text>
             </View>
-            <Text style={styles.sectionDesc}>
+            <Text
+              style={[styles.sectionDesc, { fontSize: font.caption }]}
+              maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+            >
               Tap each age to see how Kona benchmarks reading complexity, violence limits, language, romance, and sensitive themes.
             </Text>
 
@@ -376,6 +495,9 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                   style={styles.rubricAccordion}
                   activeOpacity={0.7}
                   onPress={() => setExpandedAge(isExp ? null : ageNum)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Age ${ageNum} rubric`}
+                  accessibilityState={{ expanded: isExp }}
                 >
                   <View style={styles.rubricTop}>
                     <View style={styles.rubricTitleGroup}>
@@ -385,9 +507,9 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                       <Text style={styles.rubricGrade}>{p.grade}</Text>
                     </View>
                     {isExp ? (
-                      <ChevronUp size={18} color="#64748B" />
+                      <ChevronUp size={18} color={colors.dusty} />
                     ) : (
-                      <ChevronDown size={18} color="#64748B" />
+                      <ChevronDown size={18} color={colors.dusty} />
                     )}
                   </View>
 
@@ -407,51 +529,152 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             })}
           </View>
 
-          {/* Data Management Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Data & Privacy</Text>
-            <TouchableOpacity style={styles.dangerBtn} onPress={handleClearHistory}>
-              <Trash2 size={16} color="#DC2626" />
+            <Text
+              style={[styles.sectionTitle, { fontSize: font.subtitle, marginLeft: 0 }]}
+              maxFontSizeMultiplier={font.maxFontSizeMultiplier}
+            >
+              Data & Privacy
+            </Text>
+            <TouchableOpacity
+              style={styles.dangerBtn}
+              onPress={handleClearHistory}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search history"
+            >
+              <Trash2 size={16} color={colors.rosewood} />
               <Text style={styles.dangerBtnText}>Clear Search History</Text>
             </TouchableOpacity>
+            <Text style={styles.versionText}>Kona 1.0.0 · On-device only</Text>
           </View>
 
-          {/* Save Action */}
-          <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave}>
-            <Save size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <TouchableOpacity
+            style={styles.saveBtnFull}
+            onPress={handleSave}
+            accessibilityRole="button"
+            accessibilityLabel="Save settings"
+          >
+            <Save size={18} color={colors.white} style={{ marginRight: 8 }} />
             <Text style={styles.saveBtnFullText}>Save Settings</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={editor !== null} transparent animationType="fade" onRequestClose={() => setEditor(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {editor?.mode === 'edit' ? 'Edit Reader' : 'Add Reader'}
+            </Text>
+            <Text style={styles.inputLabel}>Name</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Name"
+              placeholderTextColor={colors.dusty}
+              maxLength={20}
+              accessibilityLabel="Reader name"
+            />
+            <Text style={styles.inputLabel}>Age</Text>
+            <View style={styles.ageRow}>
+              {AGES.map((age) => {
+                const selected = editAge === age;
+                return (
+                  <TouchableOpacity
+                    key={age}
+                    style={[styles.ageChip, selected && styles.ageChipOn]}
+                    onPress={() => setEditAge(age)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Age ${age}`}
+                    accessibilityState={{ selected }}
+                  >
+                    <Text style={[styles.ageChipText, selected && styles.ageChipTextOn]}>{age}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity style={styles.modalSave} onPress={saveEditor} accessibilityRole="button" accessibilityLabel="Save reader">
+              <Text style={styles.modalSaveText}>Save</Text>
+            </TouchableOpacity>
+            {editor?.mode === 'edit' ? (
+              <TouchableOpacity
+                style={styles.modalDelete}
+                onPress={() => confirmDelete(editor.profile)}
+                accessibilityRole="button"
+                accessibilityLabel="Delete reader"
+              >
+                <Text style={styles.modalDeleteText}>Delete Reader</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity onPress={() => setEditor(null)} accessibilityRole="button" accessibilityLabel="Cancel">
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
 
+function ProviderOption({
+  selected,
+  name,
+  badge,
+  sub,
+  onPress,
+}: {
+  selected: boolean;
+  name: string;
+  badge: string;
+  sub: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      style={[styles.providerCard, selected && styles.providerCardActive]}
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={name}
+    >
+      <View style={styles.radioRow}>
+        <View style={[styles.radio, selected && styles.radioActive]} />
+        <View style={styles.providerInfo}>
+          <Text style={styles.providerName}>{name}</Text>
+          <Text style={styles.providerBadge}>{badge}</Text>
+          <Text style={styles.providerSub}>{sub}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.cream,
   },
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.linen,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-  },
-  backButton: {
-    padding: 4,
+    borderBottomColor: colors.parchment,
   },
   navTitle: {
-    fontSize: 16,
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.espresso,
   },
   saveIconButton: {
-    padding: 4,
+    minWidth: HIT_TARGET,
+    minHeight: HIT_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   keyboardView: {
     flex: 1,
@@ -460,11 +683,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
+    padding: spacing.md,
     paddingBottom: 40,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -472,28 +695,84 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionTitle: {
-    fontSize: 15,
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.espresso,
     marginLeft: 6,
   },
   sectionDesc: {
-    fontSize: 12,
-    color: '#64748B',
+    color: colors.dusty,
     marginBottom: 12,
     marginTop: 2,
   },
-  providerCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 14,
+  profileCard: {
+    width: 110,
+    backgroundColor: colors.parchment,
+    borderRadius: radii.lg,
+    padding: spacing.sm,
+    marginRight: spacing.sm,
+    alignItems: 'center',
+    minHeight: 132,
+  },
+  profileCardActive: {
+    backgroundColor: colors.linen,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+    borderColor: colors.honey,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  initial: {
+    color: colors.white,
+    fontWeight: '700',
+  },
+  profileName: {
+    fontWeight: '700',
+    color: colors.espresso,
+  },
+  profileAge: {
+    color: colors.dusty,
+    marginBottom: 4,
+  },
+  editMini: {
+    marginTop: 4,
+    minHeight: 28,
+    justifyContent: 'center',
+  },
+  editMiniText: {
+    color: colors.cocoa,
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  addCard: {
+    width: 110,
+    borderRadius: radii.lg,
+    borderWidth: 1.5,
+    borderColor: colors.cocoa,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 132,
+  },
+  addCardText: {
+    color: colors.cocoa,
+    fontWeight: '600',
+    marginTop: 6,
+  },
+  providerCard: {
+    backgroundColor: colors.linen,
+    borderRadius: radii.lg,
+    padding: 14,
     marginBottom: 10,
+    ...elevation.low,
   },
   providerCardActive: {
-    borderColor: '#4F46E5',
-    backgroundColor: '#F5F3FF',
+    borderWidth: 1.5,
+    borderColor: colors.honey,
   },
   radioRow: {
     flexDirection: 'row',
@@ -504,14 +783,14 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#CBD5E1',
+    borderColor: colors.dusty,
     marginTop: 2,
     marginRight: 10,
   },
   radioActive: {
-    borderColor: '#4F46E5',
+    borderColor: colors.honey,
     borderWidth: 6,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.linen,
   },
   providerInfo: {
     flex: 1,
@@ -519,17 +798,17 @@ const styles = StyleSheet.create({
   providerName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.espresso,
   },
   providerBadge: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: colors.honey,
     marginVertical: 2,
   },
   providerSub: {
     fontSize: 11,
-    color: '#64748B',
+    color: colors.dusty,
     lineHeight: 16,
   },
   inputGroup: {
@@ -538,84 +817,83 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#334155',
+    color: colors.espresso,
     marginBottom: 6,
   },
   keyInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    borderRadius: 10,
+    backgroundColor: colors.linen,
+    borderRadius: radii.md,
     paddingHorizontal: 12,
+    ...elevation.low,
   },
   keyInput: {
     flex: 1,
-    height: 44,
+    height: HIT_TARGET,
     fontSize: 13,
-    color: '#0F172A',
+    color: colors.espresso,
   },
   eyeBtn: {
-    padding: 6,
+    minWidth: HIT_TARGET,
+    minHeight: HIT_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   testBtn: {
-    backgroundColor: '#EEF2FF',
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-    borderRadius: 10,
-    paddingVertical: 10,
+    backgroundColor: colors.parchment,
+    borderRadius: radii.md,
+    minHeight: HIT_TARGET,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 4,
   },
   testBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: colors.cocoa,
   },
   testResultBox: {
     marginTop: 10,
     borderRadius: 8,
     padding: 10,
-    borderWidth: 1,
   },
   testSuccess: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0',
+    backgroundColor: '#EEF6F1',
   },
   testError: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
+    backgroundColor: '#F8E8E4',
   },
   testResultText: {
     fontSize: 12,
     lineHeight: 16,
   },
   testSuccessText: {
-    color: '#065F46',
+    color: colors.sage,
   },
   testErrorText: {
-    color: '#B91C1C',
+    color: colors.rosewood,
   },
   rubricAccordion: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
+    backgroundColor: colors.linen,
+    borderRadius: radii.md,
     padding: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
     marginBottom: 8,
+    ...elevation.low,
   },
   rubricTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    minHeight: 32,
   },
   rubricTitleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   rubricPill: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.parchment,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -624,73 +902,150 @@ const styles = StyleSheet.create({
   rubricPillText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#4F46E5',
+    color: colors.cocoa,
   },
   rubricGrade: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1E293B',
+    color: colors.espresso,
+    flex: 1,
   },
   rubricDetails: {
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: colors.parchment,
   },
   rubricLexile: {
     fontSize: 12,
-    color: '#475569',
+    color: colors.dusty,
     marginBottom: 2,
   },
   bold: {
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.espresso,
   },
   rubricLimits: {
     fontSize: 11,
-    color: '#64748B',
+    color: colors.dusty,
     marginBottom: 6,
   },
   rubricGuidelines: {
     fontSize: 11,
-    color: '#334155',
+    color: colors.espresso,
     lineHeight: 16,
     fontStyle: 'italic',
   },
   dangerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    borderRadius: 10,
-    paddingVertical: 12,
+    backgroundColor: '#F8E8E4',
+    borderRadius: radii.md,
+    minHeight: HIT_TARGET,
     paddingHorizontal: 14,
     marginTop: 8,
   },
   dangerBtnText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#DC2626',
+    color: colors.rosewood,
     marginLeft: 8,
   },
+  versionText: {
+    marginTop: spacing.sm,
+    color: colors.dusty,
+    fontSize: 11,
+  },
   saveBtnFull: {
-    backgroundColor: '#4F46E5',
-    borderRadius: 14,
+    backgroundColor: colors.cocoa,
+    borderRadius: radii.md,
     height: 50,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
+    ...elevation.medium,
     marginTop: 10,
   },
   saveBtnFullText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.white,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(59,47,47,0.4)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: colors.linen,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    ...elevation.high,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.espresso,
+    marginBottom: spacing.md,
+  },
+  modalInput: {
+    backgroundColor: colors.parchment,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    minHeight: HIT_TARGET,
+    color: colors.espresso,
+    marginBottom: spacing.md,
+  },
+  ageRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: spacing.md,
+  },
+  ageChip: {
+    minWidth: HIT_TARGET,
+    minHeight: HIT_TARGET,
+    borderRadius: radii.md,
+    backgroundColor: colors.parchment,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  ageChipOn: {
+    backgroundColor: colors.honey,
+  },
+  ageChipText: {
+    color: colors.dusty,
+    fontWeight: '700',
+  },
+  ageChipTextOn: {
+    color: colors.espresso,
+  },
+  modalSave: {
+    backgroundColor: colors.cocoa,
+    borderRadius: radii.md,
+    minHeight: HIT_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  modalSaveText: {
+    color: colors.white,
+    fontWeight: '700',
+  },
+  modalDelete: {
+    minHeight: HIT_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalDeleteText: {
+    color: colors.rosewood,
+    fontWeight: '700',
+  },
+  modalCancel: {
+    textAlign: 'center',
+    color: colors.dusty,
+    marginTop: spacing.sm,
   },
 });
