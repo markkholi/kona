@@ -58,10 +58,29 @@ WHY KONA?
 
 • OFFICIAL BOOK METADATA: Browse verified book covers, publication years, page counts, and ISBN details powered by Google Books.
 
-• SAVED READING LIST: Bookmark favorite titles into a personal reading list to take to the library or bookstore.
+• SAVED READING LIST: Bookmark favorite titles into a personal reading list, then share the list (or a single title) via Messages, Mail, or Notes for the library or bookstore.
 
-• PRIVACY-FIRST & ZERO ADS: No accounts, no logins, no personal data collection, and no tracking. All searches and saved books stay safely on your device.
+• SIBLING & READER PROFILES: Add up to six on-device reader profiles so siblings each keep their own saved books and search history. Names never leave the device.
+
+• DISCOVER, SAVED, SETTINGS: New bottom tabs make it easy to find books, manage each reader's list, and switch profiles.
+
+• PRIVACY-FIRST & ZERO ADS: No accounts, no logins, no personal data collection, and no tracking. Reader names, searches, and saved books stay safely on your device.
 ```
+
+### What's New (1.1.0)
+
+Paste into App Store Connect → iOS App 1.1.0 → **What's New** (4,000 characters max).
+
+```text
+What's New in 1.1.0
+
+• Reading Nook refresh — warmer look, larger covers, and Discover / Saved / Settings tabs
+• Share your book list — send recommendations or a single title via Messages, Mail, and more
+• Sibling & reader profiles — add up to 6 readers on this device; each keeps their own saved list
+• Names stay on your device — still no accounts, no login, no tracking
+```
+
+*(Exact count: 373 characters)*
 
 ### URLs
 - **Support URL:** `https://github.com/mkholi` *(or your personal site)*
@@ -96,14 +115,35 @@ When completing the Age Rating questionnaire in App Store Connect:
   - Email: `mkholi23@gmail.com`
 - **Review Notes:**
 ```text
-Kona is a book recommendation app for readers aged 10-17. It does not require an account or login. The app includes a built-in curated library that works immediately out of the box with zero external setup or API keys required. Reviewers can select any age (10-17), type any topic (e.g., "space exploration" or tap a suggestion chip), and tap "Recommend 20 Books" to view the 20 recommendations and age audit cards.
+Kona is a book recommendation app for readers aged 10-17. It does not require an account or login.
+
+Navigation uses three tabs: Discover, Saved, and Settings.
+
+Discover: select any age (10-17), type any topic (e.g., "space exploration" or tap a suggestion chip), and tap the Find 20 Books button. Results show a 2-column grid. Tap any title for the age-audit card.
+
+Saved: bookmark titles; share the list or a single book via the system share sheet.
+
+Settings: add or switch on-device reader profiles (up to 6). Each profile has its own saved list. Profile names stay on this device and are never sent to any API.
+
+The app includes a built-in curated library that works immediately with zero external setup or API keys required.
 ```
 
 ---
 
-## 4. App Store Screenshots (Ready)
+## 4. App Store Screenshots (1.1.0 — recapture needed)
 
-All required screenshots have been generated in `C:\Users\mkhol\Documents\Apps2\cursor\Kona\screenshots\`:
+**Reading Nook (AP1) changed the visible UI.** Existing 1.0.0 screenshot files in `screenshots/` are stale — recapture before submitting 1.1.0. Do not reuse the old home / results / saved / settings shots as-is.
+
+Suggested 1.1.0 captures (same 5 slots; generate or photograph — do not invent new files in this repo until they exist):
+- Discover (Home) with profile strip + mood chips
+- Results 2-column magazine grid
+- Book detail (age-audit pill)
+- Saved list (profile-scoped) and/or share sheet
+- Settings reader profiles
+
+Previous 1.0.0 files (still on disk; replace after recapture):
+
+All required screenshots were generated in `C:\Users\mkhol\Documents\Apps2\cursor\Kona\screenshots\`:
 
 ### Directory Structure & Resolutions
 1. **iPhone 6.1" (`1170 x 2532` px, 24-bit RGB, No Alpha):**
@@ -178,9 +218,9 @@ When EAS asks:
 
 ### Step 4: Complete Listing & Submit to App Review
 1. In [App Store Connect](https://appstoreconnect.apple.com), open the app.
-2. Go to **Distribution** → **iOS App 1.0.0 (Prepare for Submission)**.
-3. Upload the 5 screenshots from `.qc/appstore_1284x2778/` into the iPhone 6.7" / 6.5" slot.
-4. Paste in the **Description**, **Keywords**, **Subtitle**, and **Support URL** from Section 1 above.
+2. Go to **Distribution** → **iOS App 1.1.0 (Prepare for Submission)**.
+3. Upload **recaptured** 1.1.0 screenshots (Reading Nook UI) into the iPhone 6.7" / 6.5" slot. Do not ship the stale 1.0.0 shots.
+4. Paste in the **Description**, **What's New (1.1.0)**, **Keywords**, **Subtitle**, and **Support URL** from Section 1 above.
 5. In the **Build** section, select the uploaded build (once TestFlight finishes processing it, typically 5–15 minutes).
 6. Fill in **App Review Information** (no login required, review notes from Section 3).
 7. Complete **App Privacy** (No data collected).

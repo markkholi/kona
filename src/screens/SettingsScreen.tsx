@@ -545,7 +545,7 @@ export const SettingsScreen: React.FC<Props> = () => {
               <Trash2 size={16} color={colors.rosewood} />
               <Text style={styles.dangerBtnText}>Clear Search History</Text>
             </TouchableOpacity>
-            <Text style={styles.versionText}>Kona 1.0.0 · On-device only</Text>
+            <Text style={styles.versionText}>Kona 1.1.0 · On-device only</Text>
           </View>
 
           <TouchableOpacity
